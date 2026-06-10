@@ -4,16 +4,20 @@ import Products      from './pages/buyer/Products'
 import ProductDetail from './pages/buyer/ProductDetail'
 import Cart          from './pages/buyer/Cart'
 import Login         from './pages/auth/Login'
+import Checkout      from './pages/buyer/Checkout'
+import OrderSuccess  from './pages/buyer/OrderSuccess'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"            element={<Home />} />
-        <Route path="/products"    element={<Products />} />
-        <Route path="/product/:id" element={<ProductDetail />} />
-        <Route path="/cart"        element={<Cart />} />
-        <Route path="/login"       element={<Login />} />
+        <Route path="/"              element={<Home />} />
+        <Route path="/products"      element={<Products />} />
+        <Route path="/product/:id"   element={<ProductDetail />} />
+        <Route path="/cart"          element={<Cart />} />
+        <Route path="/login"         element={<Login />} />
+        <Route path="/checkout"      element={<Checkout />} />
+        <Route path="/order-success" element={<OrderSuccess />} />
       </Routes>
     </BrowserRouter>
   )
