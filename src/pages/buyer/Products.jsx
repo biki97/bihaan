@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
+import { useCart } from '../../context/CartContext'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../../components/Logo'
 
@@ -44,6 +46,8 @@ const states = ['All','Assam','Manipur','Meghalaya','Nagaland','Arunachal Prades
 
 export default function Products() {
   const navigate  = useNavigate()
+  const { user, signOut } = useAuth()
+  const { totalItems }    = useCart()
   const [search,   setSearch]   = useState('')
   const [cat,      setCat]      = useState('All Products')
   const [state,    setState]    = useState('All')
@@ -73,10 +77,31 @@ export default function Products() {
             <span key={item} style={{ fontSize: '13px', color: item === 'Products' ? S.accent : S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
           ))}
         </div>
-        <button onClick={() => navigate('/login')}
-          style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-          SIGN IN
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span onClick={() => navigate('/cart')}
+            style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+            🛒
+            {totalItems > 0 && (
+              <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
+                {totalItems}
+              </span>
+            )}
+          </span>
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
+              <button onClick={signOut}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
+                SIGN OUT
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => navigate('/login')}
+              style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+              SIGN IN
+            </button>
+          )}
+        </div>
       </nav>
 
       {/* Page header */}

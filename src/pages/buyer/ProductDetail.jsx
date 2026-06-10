@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Logo from '../../components/Logo'
+import { useCart } from '../../context/CartContext'
+import { useAuth } from '../../context/AuthContext'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -21,20 +23,62 @@ const allProducts = [
 ]
 
 const reviews = [
-  { name:'Priya Sharma',    city:'Delhi',     rating:5, text:'Absolutely stunning saree. The quality is exceptional and it arrived beautifully wrapped. Will definitely order again.' },
-  { name:'Rahul Mehta',     city:'Bangalore', rating:5, text:'Bought the Xorai tray as a gift. My mother was in tears — she said it reminded her of home. Thank you Bihaan.' },
-  { name:'Sunita Bora',     city:'Mumbai',    rating:4, text:'The tea is incredible. Best Assam tea I have had outside Assam itself. Fast shipping too.' },
+  { name:'Priya Sharma', city:'Delhi',     rating:5, text:'Absolutely stunning saree. The quality is exceptional and it arrived beautifully wrapped. Will definitely order again.' },
+  { name:'Rahul Mehta',  city:'Bangalore', rating:5, text:'Bought the Xorai tray as a gift. My mother was in tears — she said it reminded her of home. Thank you Bihaan.' },
+  { name:'Sunita Bora',  city:'Mumbai',    rating:4, text:'The tea is incredible. Best Assam tea I have had outside Assam itself. Fast shipping too.' },
 ]
 
+function NavBar({ navigate, user, signOut, totalItems }) {
+  return (
+    <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
+      <div style={{ display: 'flex', gap: '28px' }}>
+        {['Products','Artisans','Our Story','States'].map(item => (
+          <span key={item} onClick={() => item === 'Products' && navigate('/products')}
+            style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <span onClick={() => navigate('/cart')}
+          style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+          🛒
+          {totalItems > 0 && (
+            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
+              {totalItems}
+            </span>
+          )}
+        </span>
+        {user ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
+            <button onClick={signOut}
+              style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
+              SIGN OUT
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => navigate('/login')}
+            style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+            SIGN IN
+          </button>
+        )}
+      </div>
+    </nav>
+  )
+}
+
 export default function ProductDetail() {
-  const { id }     = useParams()
-  const navigate   = useNavigate()
-  const product    = allProducts.find(p => p.id === Number(id)) || allProducts[0]
-  const [qty, setQty]     = useState(1)
-  const [added, setAdded] = useState(false)
-  const related = allProducts.filter(p => p.id !== product.id).slice(0, 4)
+  const { id }                    = useParams()
+  const navigate                  = useNavigate()
+  const { addToCart, totalItems } = useCart()
+  const { user, signOut }         = useAuth()
+  const product                   = allProducts.find(p => p.id === Number(id)) || allProducts[0]
+  const [qty,   setQty]           = useState(1)
+  const [added, setAdded]         = useState(false)
+  const related                   = allProducts.filter(p => p.id !== product.id).slice(0, 4)
 
   function handleAddToCart() {
+    addToCart(product, qty)
     setAdded(true)
     setTimeout(() => setAdded(false), 2000)
   }
@@ -42,27 +86,12 @@ export default function ProductDetail() {
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
 
-      {/* Top bar */}
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA
       </div>
 
-      {/* Nav */}
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
-        <div style={{ display: 'flex', gap: '28px' }}>
-          {['Products','Artisans','Our Story','States'].map(item => (
-            <span key={item} onClick={() => item === 'Products' && navigate('/products')}
-              style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
-          ))}
-        </div>
-        <button onClick={() => navigate('/login')}
-          style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-          SIGN IN
-        </button>
-      </nav>
+      <NavBar navigate={navigate} user={user} signOut={signOut} totalItems={totalItems} />
 
-      {/* Breadcrumb */}
       <div style={{ padding: '14px 40px', background: S.white, borderBottom: `1px solid ${S.border}` }}>
         <p style={{ fontSize: '11px', letterSpacing: '.08em', color: S.muted, fontFamily: S.sans }}>
           <span onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>HOME</span>
@@ -73,39 +102,31 @@ export default function ProductDetail() {
         </p>
       </div>
 
-      {/* Main product section */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '48px 40px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'start' }}>
-
-        {/* Left — image */}
         <div>
           <div style={{ background: product.bg, borderRadius: '4px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
             <span style={{ fontSize: '120px', opacity: .6 }}>{product.emoji}</span>
           </div>
-          {/* Thumbnail strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
             {[1,2,3,4].map(i => (
-              <div key={i} style={{ background: product.bg, borderRadius: '3px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: i === 1 ? `2px solid ${S.accent}` : `2px solid transparent` }}>
+              <div key={i} style={{ background: product.bg, borderRadius: '3px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: i === 1 ? `2px solid ${S.accent}` : '2px solid transparent' }}>
                 <span style={{ fontSize: '24px', opacity: .5 }}>{product.emoji}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Right — product info */}
         <div>
-          {/* Category + state */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <span style={{ fontSize: '10px', letterSpacing: '.12em', color: S.accent, fontFamily: S.sans }}>{product.cat.toUpperCase()}</span>
             <span style={{ color: S.muted }}>·</span>
             <span style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, fontFamily: S.sans }}>{product.state.toUpperCase()}</span>
           </div>
 
-          {/* Name */}
           <h1 style={{ fontFamily: S.serif, fontSize: '2.4rem', fontWeight: 400, color: S.dark, lineHeight: 1.1, marginBottom: '16px', letterSpacing: '-.02em' }}>
             {product.name}
           </h1>
 
-          {/* Rating */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
             <div style={{ display: 'flex', gap: '2px' }}>
               {[1,2,3,4,5].map(s => <span key={s} style={{ color: S.gold, fontSize: '14px' }}>★</span>)}
@@ -113,7 +134,6 @@ export default function ProductDetail() {
             <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>4.9 · {reviews.length} reviews</span>
           </div>
 
-          {/* Price */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', paddingBottom: '24px', borderBottom: `1px solid ${S.border}` }}>
             <span style={{ fontFamily: S.serif, fontSize: '2rem', color: S.dark, fontWeight: 400 }}>₹{product.price.toLocaleString()}</span>
             {product.orig && (
@@ -126,19 +146,10 @@ export default function ProductDetail() {
             )}
           </div>
 
-          {/* Description */}
-          <p style={{ fontSize: '14px', color: S.muted, lineHeight: 1.85, marginBottom: '28px', fontFamily: S.sans }}>
-            {product.desc}
-          </p>
+          <p style={{ fontSize: '14px', color: S.muted, lineHeight: 1.85, marginBottom: '28px', fontFamily: S.sans }}>{product.desc}</p>
 
-          {/* Details */}
           <div style={{ marginBottom: '28px', padding: '16px 0', borderTop: `1px solid ${S.border}`, borderBottom: `1px solid ${S.border}` }}>
-            {[
-              ['Material', product.material],
-              ['Care', product.wash],
-              ['Weight', product.weight],
-              ['Time to make', product.time],
-            ].map(([label, val]) => (
+            {[['Material',product.material],['Care',product.wash],['Weight',product.weight],['Time to make',product.time]].map(([label, val]) => (
               <div key={label} style={{ display: 'flex', gap: '16px', marginBottom: '10px', fontSize: '13px', fontFamily: S.sans }}>
                 <span style={{ color: S.muted, minWidth: '100px' }}>{label}</span>
                 <span style={{ color: S.dark }}>{val}</span>
@@ -146,14 +157,11 @@ export default function ProductDetail() {
             ))}
           </div>
 
-          {/* Quantity + Add to cart */}
           <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${S.border}` }}>
-              <button onClick={() => setQty(q => Math.max(1, q - 1))}
-                style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>−</button>
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>−</button>
               <span style={{ padding: '10px 16px', fontSize: '14px', color: S.dark, fontFamily: S.sans, minWidth: '40px', textAlign: 'center' }}>{qty}</span>
-              <button onClick={() => setQty(q => q + 1)}
-                style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>+</button>
+              <button onClick={() => setQty(q => q + 1)} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>+</button>
             </div>
             <button onClick={handleAddToCart}
               style={{ flex: 1, background: added ? '#2d6a4f' : S.dark, color: '#fff', padding: '12px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', transition: 'background .3s', fontFamily: S.sans }}>
@@ -161,18 +169,13 @@ export default function ProductDetail() {
             </button>
           </div>
 
-          <button onClick={() => navigate('/checkout')}
+          <button onClick={() => { addToCart(product, qty); navigate('/cart') }}
             style={{ width: '100%', background: S.accent, color: '#fff', padding: '13px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginBottom: '24px' }}>
             BUY NOW — ₹{(product.price * qty).toLocaleString()}
           </button>
 
-          {/* Trust badges */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '0' }}>
-            {[
-              ['✓', 'Verified authentic'],
-              ['⟳', 'Easy returns'],
-              ['🔒', 'Secure payment'],
-            ].map(([icon, label]) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+            {[['✓','Verified authentic'],['⟳','Easy returns'],['🔒','Secure payment']].map(([icon, label]) => (
               <div key={label} style={{ textAlign: 'center', padding: '10px', border: `1px solid ${S.border}`, borderRadius: '3px' }}>
                 <p style={{ fontSize: '14px', marginBottom: '3px' }}>{icon}</p>
                 <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>{label}</p>
@@ -182,7 +185,6 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Artisan story */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
         <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '36px 40px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '32px', alignItems: 'center' }}>
           <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: product.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', flexShrink: 0 }}>
@@ -190,12 +192,8 @@ export default function ProductDetail() {
           </div>
           <div>
             <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '6px', fontFamily: S.sans }}>THE ARTISAN</p>
-            <h3 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '6px' }}>
-              {product.seller}
-            </h3>
-            <p style={{ fontSize: '12px', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>
-              {product.village}, {product.state} · {product.exp} of experience
-            </p>
+            <h3 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '6px' }}>{product.seller}</h3>
+            <p style={{ fontSize: '12px', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>{product.village}, {product.state} · {product.exp} of experience</p>
             <p style={{ fontSize: '13px', color: S.muted, lineHeight: 1.75, fontFamily: S.sans }}>
               {product.seller.split(' ')[0]} is a master craftsperson from {product.village} with {product.exp} of experience in {product.cat.toLowerCase()}. Every product is made by hand using traditional techniques passed down through generations.
             </p>
@@ -203,36 +201,28 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Reviews */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
-        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>
-          Customer reviews
-        </h2>
+        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>Customer reviews</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
           {reviews.map((r, i) => (
             <div key={i} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '20px' }}>
               <div style={{ display: 'flex', gap: '2px', marginBottom: '10px' }}>
                 {[1,2,3,4,5].map(s => <span key={s} style={{ color: s <= r.rating ? S.gold : '#e2d8ce', fontSize: '12px' }}>★</span>)}
               </div>
-              <p style={{ fontSize: '13px', color: S.dark, lineHeight: 1.75, marginBottom: '14px', fontFamily: S.sans, fontStyle: 'italic' }}>
-                "{r.text}"
-              </p>
+              <p style={{ fontSize: '13px', color: S.dark, lineHeight: 1.75, marginBottom: '14px', fontFamily: S.sans, fontStyle: 'italic' }}>"{r.text}"</p>
               <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>— {r.name}, {r.city}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Related products */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 60px' }}>
-        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>
-          You may also like
-        </h2>
+        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>You may also like</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
           {related.map(p => (
             <div key={p.id} onClick={() => navigate(`/product/${p.id}`)} style={{ cursor: 'pointer' }} className="group">
               <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                <span style={{ fontSize: '48px', opacity: .6, transition: 'transform .4s' }} className="group-hover:scale-105">{p.emoji}</span>
+                <span style={{ fontSize: '48px', opacity: .6 }} className="group-hover:scale-105 transition-transform">{p.emoji}</span>
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px', background: 'linear-gradient(0deg,rgba(26,18,8,.65) 0%,transparent 100%)', display: 'flex', justifyContent: 'center' }} className="opacity-0 group-hover:opacity-100 transition-opacity">
                   <span style={{ color: '#fff', fontSize: '10px', letterSpacing: '.15em', fontFamily: S.sans }}>QUICK VIEW</span>
                 </div>
@@ -245,7 +235,6 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      {/* Footer */}
       <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <div style={{ display: 'flex', gap: '20px' }}>
