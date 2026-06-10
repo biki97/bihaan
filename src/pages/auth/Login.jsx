@@ -30,8 +30,18 @@ export default function Login() {
       if (mode === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        if (data.user) navigate('/')
-
+        if (data.user) {
+          const { data: seller } = await supabase
+            .from('sellers')
+            .select('id')
+            .eq('user_id', data.user.id)
+            .single()
+          if (seller) {
+            navigate('/seller/dashboard')
+          } else {
+            navigate('/')
+          }
+        }
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -161,8 +171,14 @@ export default function Login() {
             <div style={{ flex: 1, height: '1px', background: S.border }} />
           </div>
 
+          {/* Seller CTA */}
           <div style={{ textAlign: 'center', padding: '20px', border: `1px solid ${S.border}`, borderRadius: '3px', background: S.white }}>
-            <p style={{ fontSize: '13px', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>Want to sell on Bihaan?</p>
+            <p style={{ fontSize: '13px', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>
+              Already a seller? Sign in above to access your dashboard.
+            </p>
+            <p style={{ fontSize: '13px', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>
+              Not a seller yet?
+            </p>
             <button onClick={() => navigate('/seller/register')}
               style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '8px 20px', cursor: 'pointer', fontFamily: S.sans }}>
               BECOME A SELLER

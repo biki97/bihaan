@@ -5,28 +5,43 @@ const AuthContext = createContext()
 
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null)
+  const [role,    setRole]    = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      setLoading(false)
+      if (session?.user) fetchRole(session.user.id)
+      else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
+      if (session?.user) fetchRole(session.user.id)
+      else { setRole(null); setLoading(false) }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
+  async function fetchRole(userId) {
+    const { data } = await supabase
+      .from('sellers')
+      .select('id')
+      .eq('user_id', userId)
+      .single()
+    setRole(data ? 'seller' : 'buyer')
+    setLoading(false)
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
     setUser(null)
+    setRole(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

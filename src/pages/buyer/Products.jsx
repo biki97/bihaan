@@ -46,8 +46,8 @@ const states = ['All','Assam','Manipur','Meghalaya','Nagaland','Arunachal Prades
 
 export default function Products() {
   const navigate  = useNavigate()
-  const { user, signOut } = useAuth()
-  const { totalItems }    = useCart()
+  const { user, role, signOut } = useAuth()
+  const { totalItems }       = useCart()
   const [search,   setSearch]   = useState('')
   const [cat,      setCat]      = useState('All Products')
   const [state,    setState]    = useState('All')
@@ -90,6 +90,12 @@ export default function Products() {
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
+              {role === 'seller' && (
+                <span onClick={() => navigate('/seller/dashboard')}
+                  style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
+                  MY DASHBOARD
+                </span>
+              )}
               <button onClick={signOut}
                 style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
                 SIGN OUT

@@ -1,0 +1,398 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
+import Logo from '../../components/Logo'
+
+const S = {
+  bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
+  accent: '#8b2500', gold: '#c9922a', muted: '#7a6e62',
+  border: '#e2d8ce', serif: "'Playfair Display', Georgia, serif",
+  sans: "'Inter', system-ui, sans-serif",
+}
+
+const categories = [
+  'Silk & Textiles', 'Handloom', 'Bamboo Crafts',
+  'Brass & Metal', 'Tea & Spices', 'Tribal Crafts',
+  'Pottery', 'Jewellery', 'Other'
+]
+
+const states = [
+  'Assam', 'Manipur', 'Meghalaya', 'Nagaland',
+  'Arunachal Pradesh', 'Mizoram', 'Tripura', 'Sikkim'
+]
+
+export default function SellerRegister() {
+  const navigate        = useNavigate()
+  const { user }        = useAuth()
+  const [step,    setStep]    = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+  const [form,    setForm]    = useState({
+    full_name:    '',
+    email:        '',
+    password:     '',
+    shop_name:    '',
+    description:  '',
+    category:     '',
+    state:        '',
+    district:     '',
+    phone:        '',
+    bank_account: '',
+    ifsc_code:    '',
+  })
+
+  function handleChange(e) {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  async function handleSubmit() {
+    if (!user) { navigate('/login'); return }
+    setLoading(true)
+    setError('')
+    try {
+      await supabase.from('profiles').upsert({
+        id:    user.id,
+        email: user.email,
+        role:  'seller',
+      })
+      const { error } = await supabase.from('sellers').insert({
+        user_id:      user.id,
+        shop_name:    form.shop_name,
+        description:  form.description,
+        state:        form.state,
+        district:     form.district,
+        is_approved:  false,
+        bank_account: form.bank_account,
+        ifsc_code:    form.ifsc_code,
+      })
+      if (error) throw error
+      navigate('/seller/dashboard')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
+
+      <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
+        JOIN BIHAAN · SELL YOUR HANDMADE PRODUCTS GLOBALLY
+      </div>
+
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
+          <Logo size={36} showText={true} />
+        </div>
+        <button onClick={() => navigate(-1)}
+          style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+          ← BACK
+        </button>
+      </nav>
+
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 24px' }}>
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '12px', fontFamily: S.sans }}>
+            BECOME A SELLER
+          </p>
+          <h1 style={{ fontFamily: S.serif, fontSize: '2.2rem', fontWeight: 400, color: S.dark, marginBottom: '12px' }}>
+            Share your craft with the world
+          </h1>
+          <p style={{ fontSize: '14px', color: S.muted, lineHeight: 1.8, fontFamily: S.sans }}>
+            Join 50+ artisans from Northeast India already selling on Bihaan. Free to join — we only take 10% when you make a sale.
+          </p>
+        </div>
+
+        {/* Steps indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
+          {[0, 1, 2, 3].map(s => (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '28px', height: '28px', borderRadius: '50%',
+                background: step >= s ? S.accent : S.border,
+                color: step >= s ? '#fff' : S.muted,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '11px', fontFamily: S.sans, fontWeight: 500
+              }}>{s + 1}</div>
+              {s < 3 && <div style={{ width: '36px', height: '1px', background: step > s ? S.accent : S.border }} />}
+            </div>
+          ))}
+        </div>
+
+        {/* Step labels */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '36px' }}>
+          {['Account', 'Shop details', 'Location', 'Bank details'].map((label, i) => (
+            <p key={label} style={{ fontSize: '10px', letterSpacing: '.08em', color: step === i ? S.accent : S.muted, fontFamily: S.sans }}>
+              {label.toUpperCase()}
+            </p>
+          ))}
+        </div>
+
+        {/* Form card */}
+        <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '36px' }}>
+
+          {/* Step 0 — Create account */}
+          {step === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
+                Create your seller account
+              </h2>
+              <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '-8px' }}>
+                You'll use these credentials to log back in anytime.
+              </p>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
+                <input name="full_name" value={form.full_name} onChange={handleChange}
+                  placeholder="Your full name"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>EMAIL ADDRESS *</label>
+                <input name="email" value={form.email} onChange={handleChange}
+                  placeholder="you@example.com"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PASSWORD *</label>
+                <input type="password" name="password" value={form.password} onChange={handleChange}
+                  placeholder="Minimum 6 characters"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              {error && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}>
+                  <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
+                </div>
+              )}
+
+              <button
+                disabled={loading}
+                onClick={async () => {
+                  if (!form.full_name || !form.email || !form.password) {
+                    setError('Please fill in all fields')
+                    return
+                  }
+                  if (form.password.length < 6) {
+                    setError('Password must be at least 6 characters')
+                    return
+                  }
+                  setError('')
+                  setLoading(true)
+                  try {
+                    const { data, error } = await supabase.auth.signUp({
+                      email: form.email,
+                      password: form.password,
+                      options: { data: { full_name: form.full_name } }
+                    })
+                    if (error) throw error
+                    if (data.user) {
+                      await supabase.from('profiles').upsert({
+                        id:        data.user.id,
+                        email:     form.email,
+                        full_name: form.full_name,
+                        role:      'seller',
+                      })
+                      setStep(1)
+                    }
+                  } catch (err) {
+                    setError(err.message)
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                style={{ background: loading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '8px' }}>
+                {loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT & CONTINUE →'}
+              </button>
+
+              <p style={{ fontSize: '12px', color: S.muted, textAlign: 'center', fontFamily: S.sans }}>
+                Already have an account?{' '}
+                <span onClick={() => navigate('/login')}
+                  style={{ color: S.accent, cursor: 'pointer' }}>
+                  Sign in here
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Step 1 — Shop details */}
+          {step === 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
+                Tell us about your shop
+              </h2>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>SHOP NAME *</label>
+                <input name="shop_name" value={form.shop_name} onChange={handleChange}
+                  placeholder="e.g. Rekha's Muga Silk"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>WHAT DO YOU MAKE? *</label>
+                <textarea name="description" value={form.description} onChange={handleChange}
+                  placeholder="Describe your craft in a few sentences..."
+                  rows={4}
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PRODUCT CATEGORY *</label>
+                <select name="category" value={form.category} onChange={handleChange}
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                  <option value="">Select a category</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PHONE NUMBER *</label>
+                <input name="phone" value={form.phone} onChange={handleChange}
+                  placeholder="+91 XXXXX XXXXX"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              {error && (
+                <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
+              )}
+
+              <button
+                onClick={() => {
+                  if (!form.shop_name || !form.description || !form.category || !form.phone) {
+                    setError('Please fill in all fields')
+                    return
+                  }
+                  setError('')
+                  setStep(2)
+                }}
+                style={{ background: S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginTop: '8px' }}>
+                CONTINUE →
+              </button>
+            </div>
+          )}
+
+          {/* Step 2 — Location */}
+          {step === 2 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
+                Where are you based?
+              </h2>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>STATE *</label>
+                <select name="state" value={form.state} onChange={handleChange}
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                  <option value="">Select your state</option>
+                  {states.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>DISTRICT / VILLAGE *</label>
+                <input name="district" value={form.district} onChange={handleChange}
+                  placeholder="e.g. Sualkuchi, Jorhat, Kohima"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              {error && (
+                <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setStep(1)}
+                  style={{ flex: 1, background: 'transparent', color: S.dark, padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
+                  ← BACK
+                </button>
+                <button
+                  onClick={() => {
+                    if (!form.state || !form.district) {
+                      setError('Please fill in all fields')
+                      return
+                    }
+                    setError('')
+                    setStep(3)
+                  }}
+                  style={{ flex: 2, background: S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                  CONTINUE →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 — Bank details */}
+          {step === 3 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
+                Bank details for payouts
+              </h2>
+              <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '-8px' }}>
+                Your earnings will be transferred here after each sale.
+              </p>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>BANK ACCOUNT NUMBER *</label>
+                <input name="bank_account" value={form.bank_account} onChange={handleChange}
+                  placeholder="Your bank account number"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>IFSC CODE *</label>
+                <input name="ifsc_code" value={form.ifsc_code} onChange={handleChange}
+                  placeholder="e.g. SBIN0001234"
+                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              </div>
+
+              <div style={{ padding: '12px 14px', background: '#fef5e7', border: '1px solid #f59e0b', borderRadius: '3px' }}>
+                <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, lineHeight: 1.6 }}>
+                  🔒 Your bank details are encrypted and stored securely. They are only used for sending your earnings after each sale.
+                </p>
+              </div>
+
+              {error && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px' }}>
+                  <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setStep(2)}
+                  style={{ flex: 1, background: 'transparent', color: S.dark, padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
+                  ← BACK
+                </button>
+                <button onClick={handleSubmit} disabled={loading}
+                  style={{ flex: 2, background: loading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                  {loading ? 'SUBMITTING...' : 'SUBMIT APPLICATION'}
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Benefits */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginTop: '32px' }}>
+          {[
+            ['🆓', 'Free to join',  'No upfront cost. We only earn when you earn.'],
+            ['🤖', 'AI listings',   'We write beautiful product descriptions for you.'],
+            ['🌍', 'Global reach',  'Sell to Indian diaspora and buyers worldwide.'],
+          ].map(([emoji, title, desc]) => (
+            <div key={title} style={{ textAlign: 'center', padding: '20px', background: S.white, border: `1px solid ${S.border}` }}>
+              <p style={{ fontSize: '24px', marginBottom: '8px' }}>{emoji}</p>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, marginBottom: '4px', fontFamily: S.sans }}>{title}</p>
+              <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, lineHeight: 1.5 }}>{desc}</p>
+            </div>
+          ))}
+        </div>
+
+      </div>
+    </div>
+  )
+}

@@ -28,7 +28,7 @@ const reviews = [
   { name:'Sunita Bora',  city:'Mumbai',    rating:4, text:'The tea is incredible. Best Assam tea I have had outside Assam itself. Fast shipping too.' },
 ]
 
-function NavBar({ navigate, user, signOut, totalItems }) {
+function NavBar({ navigate, user, role, signOut, totalItems }) {
   return (
     <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
       <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
@@ -51,6 +51,12 @@ function NavBar({ navigate, user, signOut, totalItems }) {
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
+            {role === 'seller' && (
+              <span onClick={() => navigate('/seller/dashboard')}
+                style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
+                MY DASHBOARD
+              </span>
+            )}
             <button onClick={signOut}
               style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
               SIGN OUT
@@ -71,7 +77,7 @@ export default function ProductDetail() {
   const { id }                    = useParams()
   const navigate                  = useNavigate()
   const { addToCart, totalItems } = useCart()
-  const { user, signOut }         = useAuth()
+  const { user, role, signOut }    = useAuth()
   const product                   = allProducts.find(p => p.id === Number(id)) || allProducts[0]
   const [qty,   setQty]           = useState(1)
   const [added, setAdded]         = useState(false)
@@ -90,7 +96,7 @@ export default function ProductDetail() {
         FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA
       </div>
 
-      <NavBar navigate={navigate} user={user} signOut={signOut} totalItems={totalItems} />
+      <NavBar navigate={navigate} user={user} role={role} signOut={signOut} totalItems={totalItems} />
 
       <div style={{ padding: '14px 40px', background: S.white, borderBottom: `1px solid ${S.border}` }}>
         <p style={{ fontSize: '11px', letterSpacing: '.08em', color: S.muted, fontFamily: S.sans }}>
