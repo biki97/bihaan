@@ -27,43 +27,16 @@ const timeOptions = [
   '5 days', '1 week', '2 weeks', '1 month'
 ]
 
-// AI Listing Generator
+// ── AI Listing Generator — calls serverless function ──
 async function generateListing(inputs) {
-  const prompt = `You are helping an artisan from Northeast India list their handmade product on an eCommerce platform called Bihaan.
-
-Artisan details:
-- Name: ${inputs.artisanName}
-- Village/District: ${inputs.village}
-- State: ${inputs.state}
-- Years of experience: ${inputs.experience}
-- Product: ${inputs.productName}
-- Category: ${inputs.category}
-- Material used: ${inputs.material}
-- Time to make: ${inputs.timeTomake}
-- Special technique (optional): ${inputs.technique || 'Traditional methods'}
-
-Write the following in JSON format only, no markdown, no extra text:
-{
-  "title": "compelling product title under 60 characters",
-  "description": "warm authentic product story 100-130 words mentioning the artisan name, village, experience and technique",
-  "features": ["feature 1", "feature 2", "feature 3", "feature 4", "feature 5"],
-  "meta": "SEO meta description under 160 characters"
-}`
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/api/generate-listing', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }]
-    })
+    body: JSON.stringify({ inputs })
   })
-
   const data = await response.json()
-  const text = data.content[0].text
-  const clean = text.replace(/```json|```/g, '').trim()
-  return JSON.parse(clean)
+  if (!response.ok) throw new Error(data.error || 'Generation failed')
+  return data
 }
 
 export default function SellerDashboard() {
@@ -74,7 +47,6 @@ export default function SellerDashboard() {
   const [products,     setProducts]     = useState([])
   const [orders,       setOrders]       = useState([])
   const [loading,      setLoading]      = useState(true)
-  const [showAddForm,  setShowAddForm]  = useState(false)
   const [aiLoading,    setAiLoading]    = useState(false)
   const [aiResult,     setAiResult]     = useState(null)
   const [saveLoading,  setSaveLoading]  = useState(false)
@@ -135,7 +107,7 @@ export default function SellerDashboard() {
         state:       aiInputs.state,
       }))
     } catch (err) {
-      alert('AI generation failed. Please try again.')
+      alert('AI generation failed: ' + err.message)
       console.error(err)
     } finally {
       setAiLoading(false)
@@ -160,10 +132,10 @@ export default function SellerDashboard() {
         is_active:   true,
       })
       if (error) throw error
-      setShowAddForm(false)
       setAiResult(null)
       setAiInputs({ artisanName:'', village:'', state:'', experience:'', productName:'', category:'', material:'', timeTomake:'', technique:'' })
       setProductForm({ title:'', description:'', price:'', stock:'', category:'', state:'' })
+      setTab('products')
       loadData()
     } catch (err) {
       alert('Failed to save product: ' + err.message)
@@ -197,9 +169,7 @@ export default function SellerDashboard() {
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
-        <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
-          {seller?.shop_name}
-        </p>
+        <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>{seller?.shop_name}</p>
         <button onClick={() => navigate('/')}
           style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
           ← BACK TO STORE
@@ -208,7 +178,7 @@ export default function SellerDashboard() {
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '36px 40px' }}>
 
-        {/* Welcome + stats */}
+        {/* Stats */}
         <div style={{ marginBottom: '32px' }}>
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '6px', fontFamily: S.sans }}>
             {seller?.is_approved ? '✓ APPROVED SELLER' : '⏳ PENDING APPROVAL'}
@@ -216,13 +186,12 @@ export default function SellerDashboard() {
           <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>
             Welcome, {seller?.shop_name}
           </h1>
-
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
             {[
-              ['Total Products', products.length],
+              ['Total Products',  products.length],
               ['Active Listings', products.filter(p => p.is_active).length],
-              ['Total Orders', orders.length],
-              ['Total Earnings', `₹${(seller?.total_earnings || 0).toLocaleString()}`],
+              ['Total Orders',    orders.length],
+              ['Total Earnings',  `₹${(seller?.total_earnings || 0).toLocaleString()}`],
             ].map(([label, value]) => (
               <div key={label} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.8rem', color: S.dark, marginBottom: '4px' }}>{value}</p>
@@ -235,7 +204,7 @@ export default function SellerDashboard() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '2px', marginBottom: '28px', borderBottom: `1px solid ${S.border}` }}>
           {['products', 'add', 'orders'].map(t => (
-            <button key={t} onClick={() => { setTab(t); if(t === 'add') setShowAddForm(true) }}
+            <button key={t} onClick={() => setTab(t)}
               style={{ padding: '10px 20px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans, background: 'transparent', color: tab === t ? S.accent : S.muted, borderBottom: tab === t ? `2px solid ${S.accent}` : '2px solid transparent', marginBottom: '-1px' }}>
               {t === 'products' ? 'MY PRODUCTS' : t === 'add' ? '+ ADD PRODUCT' : 'ORDERS'}
             </button>
@@ -284,126 +253,122 @@ export default function SellerDashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
 
             {/* Left — AI inputs */}
-            <div>
-              <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                  <div style={{ width: '32px', height: '32px', background: S.accent, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✨</div>
-                  <div>
-                    <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>AI Listing Generator</p>
-                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Fill in simple details — AI writes the listing</p>
+            <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '32px', height: '32px', background: S.accent, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✨</div>
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>AI Listing Generator</p>
+                  <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Fill in simple details — AI writes the listing</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {[
+                  ['artisanName', 'ARTISAN NAME *',            'e.g. Rekha Bora'],
+                  ['village',     'VILLAGE / DISTRICT *',      'e.g. Sualkuchi'],
+                  ['experience',  'YEARS OF EXPERIENCE *',     'e.g. 25 years'],
+                  ['productName', 'PRODUCT NAME *',            'e.g. Muga Silk Saree'],
+                  ['material',    'MATERIAL USED *',           'e.g. Pure Muga silk'],
+                  ['technique',   'SPECIAL TECHNIQUE (optional)', 'e.g. Hand-loomed'],
+                ].map(([name, label, placeholder]) => (
+                  <div key={name}>
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>{label}</label>
+                    <input type="text" name={name} value={aiInputs[name]} onChange={handleAiInput}
+                      placeholder={placeholder}
+                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
                   </div>
+                ))}
+
+                <div>
+                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STATE *</label>
+                  <select name="state" value={aiInputs.state} onChange={handleAiInput}
+                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                    <option value="">Select state</option>
+                    {states.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {[
-                    ['artisanName', 'ARTISAN NAME *', 'text', 'e.g. Rekha Bora'],
-                    ['village',     'VILLAGE / DISTRICT *', 'text', 'e.g. Sualkuchi'],
-                    ['experience',  'YEARS OF EXPERIENCE *', 'text', 'e.g. 25 years'],
-                    ['productName', 'PRODUCT NAME *', 'text', 'e.g. Muga Silk Saree'],
-                    ['material',    'MATERIAL USED *', 'text', 'e.g. Pure Muga silk'],
-                    ['technique',   'SPECIAL TECHNIQUE (optional)', 'text', 'e.g. Hand-loomed'],
-                  ].map(([name, label, type, placeholder]) => (
-                    <div key={name}>
-                      <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>{label}</label>
-                      <input type={type} name={name} value={aiInputs[name]} onChange={handleAiInput}
-                        placeholder={placeholder}
-                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
-                    </div>
-                  ))}
-
-                  <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STATE *</label>
-                    <select name="state" value={aiInputs.state} onChange={handleAiInput}
-                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                      <option value="">Select state</option>
-                      {states.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>CATEGORY *</label>
-                    <select name="category" value={aiInputs.category} onChange={handleAiInput}
-                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                      <option value="">Select category</option>
-                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>TIME TO MAKE *</label>
-                    <select name="timeTomake" value={aiInputs.timeTomake} onChange={handleAiInput}
-                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                      <option value="">Select time</option>
-                      {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-
-                  <button onClick={handleGenerateListing} disabled={aiLoading}
-                    style={{ background: aiLoading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: aiLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '4px' }}>
-                    {aiLoading ? '✨ GENERATING...' : '✨ GENERATE LISTING WITH AI'}
-                  </button>
+                <div>
+                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>CATEGORY *</label>
+                  <select name="category" value={aiInputs.category} onChange={handleAiInput}
+                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                    <option value="">Select category</option>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
+
+                <div>
+                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>TIME TO MAKE *</label>
+                  <select name="timeTomake" value={aiInputs.timeTomake} onChange={handleAiInput}
+                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                    <option value="">Select time</option>
+                    {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                <button onClick={handleGenerateListing} disabled={aiLoading}
+                  style={{ background: aiLoading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: aiLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '4px' }}>
+                  {aiLoading ? '✨ GENERATING...' : '✨ GENERATE LISTING WITH AI'}
+                </button>
               </div>
             </div>
 
-            {/* Right — product form + AI result */}
-            <div>
-              <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
-                <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, fontFamily: S.sans, marginBottom: '20px', letterSpacing: '.05em' }}>
-                  PRODUCT DETAILS
-                </p>
+            {/* Right — product form */}
+            <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, fontFamily: S.sans, marginBottom: '20px', letterSpacing: '.05em' }}>
+                PRODUCT DETAILS
+              </p>
 
-                {aiResult && (
-                  <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '12px 14px', marginBottom: '16px', borderRadius: '3px' }}>
-                    <p style={{ fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>✓ AI generated listing — review and edit below before saving</p>
+              {aiResult && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '12px 14px', marginBottom: '16px', borderRadius: '3px' }}>
+                  <p style={{ fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>✓ AI generated — review and edit before saving</p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>PRODUCT TITLE *</label>
+                  <input name="title" value={productForm.title} onChange={handleProductInput}
+                    placeholder="Generated by AI or type manually"
+                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>DESCRIPTION *</label>
+                  <textarea name="description" value={productForm.description} onChange={handleProductInput}
+                    placeholder="Generated by AI or type manually"
+                    rows={6}
+                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
+                </div>
+
+                {aiResult?.features && (
+                  <div style={{ background: S.bg, border: `1px solid ${S.border}`, padding: '14px', borderRadius: '3px' }}>
+                    <p style={{ fontSize: '10px', letterSpacing: '.1em', color: S.muted, marginBottom: '8px', fontFamily: S.sans }}>KEY FEATURES</p>
+                    {aiResult.features.map((f, i) => (
+                      <p key={i} style={{ fontSize: '12px', color: S.dark, fontFamily: S.sans, marginBottom: '4px' }}>▸ {f}</p>
+                    ))}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>PRODUCT TITLE *</label>
-                    <input name="title" value={productForm.title} onChange={handleProductInput}
-                      placeholder="Product title will appear here after AI generation"
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>PRICE (₹) *</label>
+                    <input type="number" name="price" value={productForm.price} onChange={handleProductInput}
+                      placeholder="e.g. 1200"
                       style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
                   </div>
-
                   <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>DESCRIPTION *</label>
-                    <textarea name="description" value={productForm.description} onChange={handleProductInput}
-                      placeholder="Product description will appear here after AI generation"
-                      rows={6}
-                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STOCK *</label>
+                    <input type="number" name="stock" value={productForm.stock} onChange={handleProductInput}
+                      placeholder="e.g. 5"
+                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
                   </div>
-
-                  {aiResult && (
-                    <div style={{ background: S.bg, border: `1px solid ${S.border}`, padding: '14px', borderRadius: '3px' }}>
-                      <p style={{ fontSize: '10px', letterSpacing: '.1em', color: S.muted, marginBottom: '8px', fontFamily: S.sans }}>KEY FEATURES</p>
-                      {aiResult.features?.map((f, i) => (
-                        <p key={i} style={{ fontSize: '12px', color: S.dark, fontFamily: S.sans, marginBottom: '4px' }}>▸ {f}</p>
-                      ))}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>PRICE (₹) *</label>
-                      <input type="number" name="price" value={productForm.price} onChange={handleProductInput}
-                        placeholder="e.g. 1200"
-                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STOCK *</label>
-                      <input type="number" name="stock" value={productForm.stock} onChange={handleProductInput}
-                        placeholder="e.g. 5"
-                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
-                    </div>
-                  </div>
-
-                  <button onClick={handleSaveProduct} disabled={saveLoading}
-                    style={{ background: saveLoading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: saveLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
-                    {saveLoading ? 'SAVING...' : 'SAVE PRODUCT'}
-                  </button>
                 </div>
+
+                <button onClick={handleSaveProduct} disabled={saveLoading}
+                  style={{ background: saveLoading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: saveLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                  {saveLoading ? 'SAVING...' : 'SAVE PRODUCT'}
+                </button>
               </div>
             </div>
           </div>
