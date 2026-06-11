@@ -57,6 +57,12 @@ function NavBar({ navigate, user, role, signOut, totalItems }) {
                 MY DASHBOARD
               </span>
             )}
+            {user?.email === 'bikidutta319@gmail.com' && (
+              <span onClick={() => navigate('/admin')}
+                style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
+                ADMIN ⚙️
+              </span>
+            )}
             <button onClick={signOut}
               style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
               SIGN OUT

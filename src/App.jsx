@@ -1,13 +1,14 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Home             from './pages/buyer/Home'
-import Products         from './pages/buyer/Products'
-import ProductDetail    from './pages/buyer/ProductDetail'
-import Cart             from './pages/buyer/Cart'
-import Login            from './pages/auth/Login'
-import Checkout         from './pages/buyer/Checkout'
-import OrderSuccess     from './pages/buyer/OrderSuccess'
-import SellerRegister   from './pages/seller/SellerRegister'
-import SellerDashboard  from './pages/seller/SellerDashboard'
+import Home            from './pages/buyer/Home'
+import Products        from './pages/buyer/Products'
+import ProductDetail   from './pages/buyer/ProductDetail'
+import Cart            from './pages/buyer/Cart'
+import Login           from './pages/auth/Login'
+import Checkout        from './pages/buyer/Checkout'
+import OrderSuccess    from './pages/buyer/OrderSuccess'
+import SellerRegister  from './pages/seller/SellerRegister'
+import SellerDashboard from './pages/seller/SellerDashboard'
+import AdminDashboard  from './pages/admin/AdminDashboard'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/order-success"      element={<OrderSuccess />} />
         <Route path="/seller/register"    element={<SellerRegister />} />
         <Route path="/seller/dashboard"   element={<SellerDashboard />} />
+        <Route path="/admin"              element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   )
