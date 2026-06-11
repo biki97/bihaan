@@ -27,16 +27,63 @@ const timeOptions = [
   '5 days', '1 week', '2 weeks', '1 month'
 ]
 
-// ── AI Listing Generator — calls serverless function ──
+// ── AI Listing Generator ──
 async function generateListing(inputs) {
-  const response = await fetch('/api/generate-listing', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs })
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error || 'Generation failed')
-  return data
+  const prompt = `You are helping an artisan from Northeast India list their handmade product on Bihaan marketplace.
+
+Artisan details:
+- Name: ${inputs.artisanName}
+- Village: ${inputs.village}
+- State: ${inputs.state}
+- Experience: ${inputs.experience}
+- Product: ${inputs.productName}
+- Category: ${inputs.category}
+- Material: ${inputs.material}
+- Time to make: ${inputs.timeTomake}
+- Technique: ${inputs.technique || 'Traditional methods'}
+
+Respond ONLY with a valid JSON object, no markdown:
+{
+  "title": "product title under 60 characters",
+  "description": "warm authentic 100-130 word story about the artisan and product",
+  "features": ["feature 1", "feature 2", "feature 3", "feature 4", "feature 5"],
+  "meta": "SEO description under 160 characters"
+}`
+
+  const isDev = window.location.hostname === 'localhost'
+
+  if (isDev) {
+    // Direct Gemini call for local development
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7 }
+        })
+      }
+    )
+    if (!response.ok) {
+      const err = await response.json()
+      throw new Error(`Gemini error ${response.status}: ${err?.error?.message}`)
+    }
+    const data = await response.json()
+    const text = data.candidates[0].content.parts[0].text
+    const clean = text.replace(/```json|```/g, '').trim()
+    return JSON.parse(clean)
+  } else {
+    // Serverless function for Vercel production
+    const response = await fetch('/api/generate-listing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs })
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Generation failed')
+    return data
+  }
 }
 
 export default function SellerDashboard() {
