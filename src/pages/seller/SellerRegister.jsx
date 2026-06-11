@@ -28,7 +28,14 @@ export default function SellerRegister() {
   const [step,    setStep]    = useState(0)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
-  const [form,    setForm]    = useState({
+
+  // Step 0 state
+  const [authTab,  setAuthTab]  = useState('email')
+  const [phone,    setPhone]    = useState('')
+  const [otp,      setOtp]      = useState('')
+  const [otpSent,  setOtpSent]  = useState(false)
+
+  const [form, setForm] = useState({
     full_name:    '',
     email:        '',
     password:     '',
@@ -46,16 +53,80 @@ export default function SellerRegister() {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
+  // ── EMAIL SIGNUP ──
+  async function handleEmailSignup() {
+    if (!form.full_name || !form.email || !form.password) { setError('Please fill in all fields'); return }
+    if (form.password.length < 6) { setError('Password must be at least 6 characters'); return }
+    setError('')
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: { data: { full_name: form.full_name } }
+      })
+      if (error) throw error
+      if (data.user) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id, email: form.email, full_name: form.full_name, role: 'seller'
+        })
+        setStep(1)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── SEND OTP ──
+  async function handleSendOtp() {
+    if (!phone || phone.length < 10) { setError('Please enter a valid 10-digit number'); return }
+    setError('')
+    setLoading(true)
+    try {
+      const fullPhone = `+91${phone.replace(/\s/g, '')}`
+      const { error } = await supabase.auth.signInWithOtp({ phone: fullPhone })
+      if (error) throw error
+      setOtpSent(true)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── VERIFY OTP ──
+  async function handleVerifyOtp() {
+    if (!otp || otp.length < 6) { setError('Please enter the 6-digit OTP'); return }
+    setError('')
+    setLoading(true)
+    try {
+      const fullPhone = `+91${phone.replace(/\s/g, '')}`
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: fullPhone, token: otp, type: 'sms'
+      })
+      if (error) throw error
+      if (data.user) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id, phone: fullPhone, role: 'seller'
+        })
+        setStep(1)
+      }
+    } catch (err) {
+      setError(err.message || 'Invalid OTP')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── FINAL SUBMIT ──
   async function handleSubmit() {
     if (!user) { navigate('/login'); return }
     setLoading(true)
     setError('')
     try {
-      await supabase.from('profiles').upsert({
-        id:    user.id,
-        email: user.email,
-        role:  'seller',
-      })
+      await supabase.from('profiles').upsert({ id: user.id, email: user.email, role: 'seller' })
       const { error } = await supabase.from('sellers').insert({
         user_id:      user.id,
         shop_name:    form.shop_name,
@@ -96,9 +167,7 @@ export default function SellerRegister() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '12px', fontFamily: S.sans }}>
-            BECOME A SELLER
-          </p>
+          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '12px', fontFamily: S.sans }}>BECOME A SELLER</p>
           <h1 style={{ fontFamily: S.serif, fontSize: '2.2rem', fontWeight: 400, color: S.dark, marginBottom: '12px' }}>
             Share your craft with the world
           </h1>
@@ -135,7 +204,7 @@ export default function SellerRegister() {
         {/* Form card */}
         <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '36px' }}>
 
-          {/* Step 0 — Create account */}
+          {/* ── STEP 0 — Account ── */}
           {step === 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
@@ -145,96 +214,123 @@ export default function SellerRegister() {
                 You'll use these credentials to log back in anytime.
               </p>
 
-              <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
-                <input name="full_name" value={form.full_name} onChange={handleChange}
-                  placeholder="Your full name"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              {/* Auth method tabs */}
+              <div style={{ display: 'flex', border: `1px solid ${S.border}`, borderRadius: '3px', overflow: 'hidden' }}>
+                {[['email', '📧 Email'], ['phone', '📱 Phone']].map(([t, label]) => (
+                  <button key={t} onClick={() => { setAuthTab(t); setError(''); setOtpSent(false) }}
+                    style={{ flex: 1, padding: '9px', fontSize: '12px', border: 'none', cursor: 'pointer', fontFamily: S.sans, background: authTab === t ? S.dark : S.white, color: authTab === t ? '#fff' : S.muted, transition: 'all .2s' }}>
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>EMAIL ADDRESS *</label>
-                <input name="email" value={form.email} onChange={handleChange}
-                  placeholder="you@example.com"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PASSWORD *</label>
-                <input type="password" name="password" value={form.password} onChange={handleChange}
-                  placeholder="Minimum 6 characters"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
-              </div>
-
-              {error && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}>
-                  <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
-                </div>
+              {/* Email option */}
+              {authTab === 'email' && (
+                <>
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
+                    <input name="full_name" value={form.full_name} onChange={handleChange}
+                      placeholder="Your full name"
+                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>EMAIL ADDRESS *</label>
+                    <input name="email" value={form.email} onChange={handleChange}
+                      placeholder="you@example.com"
+                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PASSWORD *</label>
+                    <input type="password" name="password" value={form.password} onChange={handleChange}
+                      placeholder="Minimum 6 characters"
+                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                  </div>
+                  {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
+                  <button onClick={handleEmailSignup} disabled={loading}
+                    style={{ background: loading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                    {loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT & CONTINUE →'}
+                  </button>
+                </>
               )}
 
-              <button
-                disabled={loading}
-                onClick={async () => {
-                  if (!form.full_name || !form.email || !form.password) {
-                    setError('Please fill in all fields')
-                    return
-                  }
-                  if (form.password.length < 6) {
-                    setError('Password must be at least 6 characters')
-                    return
-                  }
-                  setError('')
-                  setLoading(true)
-                  try {
-                    const { data, error } = await supabase.auth.signUp({
-                      email: form.email,
-                      password: form.password,
-                      options: { data: { full_name: form.full_name } }
-                    })
-                    if (error) throw error
-                    if (data.user) {
-                      await supabase.from('profiles').upsert({
-                        id:        data.user.id,
-                        email:     form.email,
-                        full_name: form.full_name,
-                        role:      'seller',
-                      })
-                      setStep(1)
-                    }
-                  } catch (err) {
-                    setError(err.message)
-                  } finally {
-                    setLoading(false)
-                  }
-                }}
-                style={{ background: loading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '8px' }}>
-                {loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT & CONTINUE →'}
-              </button>
+              {/* Phone option */}
+              {authTab === 'phone' && (
+                <>
+                  {!otpSent ? (
+                    <>
+                      <div>
+                        <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>MOBILE NUMBER *</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ padding: '11px 14px', border: `1px solid ${S.border}`, background: '#f0e8e4', fontSize: '14px', color: S.dark, fontFamily: S.sans, whiteSpace: 'nowrap' }}>
+                            🇮🇳 +91
+                          </div>
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="10 digit mobile number"
+                            style={{ flex: 1, padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                        </div>
+                        <p style={{ fontSize: '11px', color: S.muted, marginTop: '6px', fontFamily: S.sans }}>
+                          We'll send a 6-digit OTP to verify your number
+                        </p>
+                      </div>
+                      {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
+                      <button onClick={handleSendOtp} disabled={loading}
+                        style={{ background: loading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                        {loading ? 'SENDING OTP...' : 'SEND OTP →'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '12px 14px', borderRadius: '3px' }}>
+                        <p style={{ fontSize: '13px', color: '#15803d', fontFamily: S.sans }}>✓ OTP sent to +91{phone}</p>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>ENTER 6-DIGIT OTP *</label>
+                        <input
+                          type="text"
+                          value={otp}
+                          onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="_ _ _ _ _ _"
+                          maxLength={6}
+                          style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '20px', color: S.dark, outline: 'none', fontFamily: S.sans, letterSpacing: '0.5em', textAlign: 'center' }} />
+                      </div>
+                      {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
+                      <button onClick={handleVerifyOtp} disabled={loading || otp.length < 6}
+                        style={{ background: loading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                        {loading ? 'VERIFYING...' : 'VERIFY & CONTINUE →'}
+                      </button>
+                      <button onClick={() => { setOtpSent(false); setOtp(''); setError('') }}
+                        style={{ background: 'transparent', color: S.muted, padding: '8px', fontSize: '11px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                        ← Change number
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
 
               <p style={{ fontSize: '12px', color: S.muted, textAlign: 'center', fontFamily: S.sans }}>
                 Already have an account?{' '}
-                <span onClick={() => navigate('/login')}
-                  style={{ color: S.accent, cursor: 'pointer' }}>
+                <span onClick={() => navigate('/login')} style={{ color: S.accent, cursor: 'pointer' }}>
                   Sign in here
                 </span>
               </p>
             </div>
           )}
 
-          {/* Step 1 — Shop details */}
+          {/* ── STEP 1 — Shop details ── */}
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
                 Tell us about your shop
               </h2>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>SHOP NAME *</label>
                 <input name="shop_name" value={form.shop_name} onChange={handleChange}
                   placeholder="e.g. Rekha's Muga Silk"
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>WHAT DO YOU MAKE? *</label>
                 <textarea name="description" value={form.description} onChange={handleChange}
@@ -242,7 +338,6 @@ export default function SellerRegister() {
                   rows={4}
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PRODUCT CATEGORY *</label>
                 <select name="category" value={form.category} onChange={handleChange}
@@ -251,40 +346,29 @@ export default function SellerRegister() {
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PHONE NUMBER *</label>
                 <input name="phone" value={form.phone} onChange={handleChange}
                   placeholder="+91 XXXXX XXXXX"
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
-
-              {error && (
-                <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
-              )}
-
-              <button
-                onClick={() => {
-                  if (!form.shop_name || !form.description || !form.category || !form.phone) {
-                    setError('Please fill in all fields')
-                    return
-                  }
-                  setError('')
-                  setStep(2)
-                }}
+              {error && <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>}
+              <button onClick={() => {
+                if (!form.shop_name || !form.description || !form.category || !form.phone) { setError('Please fill in all fields'); return }
+                setError(''); setStep(2)
+              }}
                 style={{ background: S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginTop: '8px' }}>
                 CONTINUE →
               </button>
             </div>
           )}
 
-          {/* Step 2 — Location */}
+          {/* ── STEP 2 — Location ── */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
                 Where are you based?
               </h2>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>STATE *</label>
                 <select name="state" value={form.state} onChange={handleChange}
@@ -293,32 +377,22 @@ export default function SellerRegister() {
                   {states.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>DISTRICT / VILLAGE *</label>
                 <input name="district" value={form.district} onChange={handleChange}
                   placeholder="e.g. Sualkuchi, Jorhat, Kohima"
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
-
-              {error && (
-                <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
-              )}
-
+              {error && <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => setStep(1)}
                   style={{ flex: 1, background: 'transparent', color: S.dark, padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
                   ← BACK
                 </button>
-                <button
-                  onClick={() => {
-                    if (!form.state || !form.district) {
-                      setError('Please fill in all fields')
-                      return
-                    }
-                    setError('')
-                    setStep(3)
-                  }}
+                <button onClick={() => {
+                  if (!form.state || !form.district) { setError('Please fill in all fields'); return }
+                  setError(''); setStep(3)
+                }}
                   style={{ flex: 2, background: S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
                   CONTINUE →
                 </button>
@@ -326,7 +400,7 @@ export default function SellerRegister() {
             </div>
           )}
 
-          {/* Step 3 — Bank details */}
+          {/* ── STEP 3 — Bank details ── */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
@@ -335,33 +409,24 @@ export default function SellerRegister() {
               <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '-8px' }}>
                 Your earnings will be transferred here after each sale.
               </p>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>BANK ACCOUNT NUMBER *</label>
                 <input name="bank_account" value={form.bank_account} onChange={handleChange}
                   placeholder="Your bank account number"
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
-
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>IFSC CODE *</label>
                 <input name="ifsc_code" value={form.ifsc_code} onChange={handleChange}
                   placeholder="e.g. SBIN0001234"
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
-
               <div style={{ padding: '12px 14px', background: '#fef5e7', border: '1px solid #f59e0b', borderRadius: '3px' }}>
                 <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, lineHeight: 1.6 }}>
-                  🔒 Your bank details are encrypted and stored securely. They are only used for sending your earnings after each sale.
+                  🔒 Your bank details are encrypted and stored securely. Only used for sending your earnings after each sale.
                 </p>
               </div>
-
-              {error && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px' }}>
-                  <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>
-                </div>
-              )}
-
+              {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => setStep(2)}
                   style={{ flex: 1, background: 'transparent', color: S.dark, padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
