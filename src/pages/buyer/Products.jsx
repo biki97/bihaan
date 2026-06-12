@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth }     from '../../context/AuthContext'
 import { useCart }     from '../../context/CartContext'
 import { useWishlist } from '../../context/WishlistContext'
 import { useCurrency } from '../../context/CurrencyContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
 
 const S = {
@@ -13,38 +14,24 @@ const S = {
   sans: "'Inter', system-ui, sans-serif",
 }
 
-const allProducts = [
-  { id:1,  name:'Muga Silk Saree',         price:4500, orig:5200, seller:'Rekha Bora',     state:'Assam',             cat:'Silk & Textiles', bg:'#f9f0e8', emoji:'🧵', time:'4 days',  stock:2  },
-  { id:2,  name:'Bamboo Pendant Lamp',      price:850,  orig:null, seller:'Mohan Das',      state:'Tripura',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'2 days',  stock:12 },
-  { id:3,  name:'Xorai Brass Tray',         price:1200, orig:null, seller:'Dipali Gogoi',   state:'Assam',             cat:'Brass & Metal',   bg:'#fdf7e3', emoji:'🏺', time:'3 days',  stock:3  },
-  { id:4,  name:'Orthodox Gold Tea',        price:450,  orig:550,  seller:'Rahim Ali',      state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day',   stock:20 },
-  { id:5,  name:'Naga Warrior Shawl',       price:2800, orig:null, seller:'Leno Angami',    state:'Nagaland',          cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'6 days',  stock:7  },
-  { id:6,  name:'Longpi Pottery Bowl',      price:650,  orig:null, seller:'Sana Devi',      state:'Manipur',           cat:'Pottery',         bg:'#fdf0e8', emoji:'🏛️', time:'2 days',  stock:1  },
-  { id:7,  name:'Cane Woven Basket',        price:380,  orig:null, seller:'Biren Singh',    state:'Manipur',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'1 day',   stock:8  },
-  { id:8,  name:'Tribal Silver Ring',       price:920,  orig:1100, seller:'Pemba Sherpa',   state:'Sikkim',            cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'3 days',  stock:3  },
-  { id:9,  name:'Eri Silk Stole',           price:1800, orig:null, seller:'Anita Baruah',   state:'Assam',             cat:'Silk & Textiles', bg:'#f9f0e8', emoji:'🧵', time:'5 days',  stock:6  },
-  { id:10, name:'Bamboo Pen Stand',         price:280,  orig:null, seller:'Rajesh Paul',    state:'Meghalaya',         cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'1 day',   stock:15 },
-  { id:11, name:'Assam Masala Tea',         price:320,  orig:null, seller:'Fatima Begum',   state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day',   stock:25 },
-  { id:12, name:'Mizo Handloom Bag',        price:750,  orig:null, seller:'Lalrinmawia',    state:'Mizoram',           cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'3 days',  stock:4  },
-  { id:13, name:'Arunachal Wood Mask',      price:2200, orig:null, seller:'Tashi Dorje',    state:'Arunachal Pradesh', cat:'Heritage Crafts', bg:'#eef3f8', emoji:'🎨', time:'7 days',  stock:2  },
-  { id:14, name:'Brass Bell (Ghanta)',      price:560,  orig:null, seller:'Hemanta Kalita', state:'Assam',             cat:'Brass & Metal',   bg:'#fdf7e3', emoji:'🏺', time:'2 days',  stock:9  },
-  { id:15, name:'Tripura Bamboo Flute',     price:420,  orig:null, seller:'Sunil Debbarma', state:'Tripura',           cat:'Heritage Crafts', bg:'#eef3f8', emoji:'🎨', time:'2 days',  stock:3  },
-  { id:16, name:'Silver Necklace',          price:3200, orig:3800, seller:'Meren Jamir',    state:'Nagaland',          cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'4 days',  stock:1  },
-]
-
 const categories = [
-  { name:'All Products',    count:240 },
-  { name:'Silk & Textiles', count:48  },
-  { name:'Handloom',        count:62  },
-  { name:'Bamboo Crafts',   count:35  },
-  { name:'Brass & Metal',   count:29  },
-  { name:'Tea & Spices',    count:41  },
-  { name:'Heritage Crafts', count:33  },
-  { name:'Pottery',         count:18  },
-  { name:'Jewellery',       count:27  },
+  'All Products', 'Silk & Textiles', 'Handloom', 'Bamboo Crafts',
+  'Brass & Metal', 'Tea & Spices', 'Heritage Crafts', 'Pottery', 'Jewellery',
 ]
 
 const states = ['All','Assam','Manipur','Meghalaya','Nagaland','Arunachal Pradesh','Mizoram','Tripura','Sikkim']
+
+const CAT_STYLE = {
+  'Silk & Textiles': { bg: '#f9f0e8', emoji: '🧵' },
+  'Handloom':        { bg: '#f3f0fb', emoji: '🪡' },
+  'Bamboo Crafts':   { bg: '#edf5ee', emoji: '🎋' },
+  'Brass & Metal':   { bg: '#fdf7e3', emoji: '🏺' },
+  'Tea & Spices':    { bg: '#fef5e7', emoji: '🍵' },
+  'Heritage Crafts': { bg: '#eef3f8', emoji: '🎨' },
+  'Pottery':         { bg: '#fdf0e8', emoji: '🏛️' },
+  'Jewellery':       { bg: '#fdf0f5', emoji: '💍' },
+  'Other':           { bg: '#f5f0e8', emoji: '🛍️' },
+}
 
 function CurrencyToggle() {
   const { currency, setCurrency } = useCurrency()
@@ -61,29 +48,55 @@ function CurrencyToggle() {
 }
 
 export default function Products() {
-  const navigate                        = useNavigate()
-  const { user, role, signOut }         = useAuth()
-  const { totalItems }                  = useCart()
+  const navigate                           = useNavigate()
+  const [searchParams]                     = useSearchParams()
+  const { user, role, signOut }            = useAuth()
+  const { totalItems }                     = useCart()
   const { toggleWishlist, isWishlisted, wishlist } = useWishlist()
-  const { formatPrice }                 = useCurrency()
-  const [search,   setSearch]   = useState('')
-  const [cat,      setCat]      = useState('All Products')
-  const [state,    setState]    = useState('All')
-  const [sort,     setSort]     = useState('newest')
-  const [priceMax, setPriceMax] = useState(5000)
+  const { formatPrice }                    = useCurrency()
+
+  const [allProducts, setAllProducts] = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [search,      setSearch]      = useState('')
+  const [cat,         setCat]         = useState(searchParams.get('category') || 'All Products')
+  const [state,       setState]       = useState(searchParams.get('state') || 'All')
+  const [sort,        setSort]        = useState('newest')
+  const [priceMax,    setPriceMax]    = useState(10000)
+
+  useEffect(() => {
+    loadProducts()
+  }, [])
+
+  async function loadProducts() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    setAllProducts(data || [])
+    setLoading(false)
+  }
 
   const filtered = allProducts
-    .filter(p => cat   === 'All Products' || p.cat   === cat)
-    .filter(p => state === 'All'          || p.state === state)
+    .filter(p => cat   === 'All Products' || p.category === cat)
+    .filter(p => state === 'All'          || p.state    === state)
     .filter(p => p.price <= priceMax)
-    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.seller.toLowerCase().includes(search.toLowerCase()))
-    .sort((a,b) => sort === 'price_asc' ? a.price - b.price : sort === 'price_desc' ? b.price - a.price : b.id - a.id)
+    .filter(p =>
+      p.title?.toLowerCase().includes(search.toLowerCase()) ||
+      p.description?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a,b) =>
+      sort === 'price_asc'  ? a.price - b.price :
+      sort === 'price_desc' ? b.price - a.price :
+      new Date(b.created_at) - new Date(a.created_at)
+    )
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
-        FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA &nbsp;·&nbsp; 50+ VERIFIED ARTISANS
+        FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA
       </div>
 
       {/* Nav */}
@@ -96,33 +109,19 @@ export default function Products() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <CurrencyToggle />
-          {/* Wishlist */}
           <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
             🤍
-            {wishlist.length > 0 && (
-              <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
-                {wishlist.length}
-              </span>
-            )}
+            {wishlist.length > 0 && <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{wishlist.length}</span>}
           </span>
-          {/* Cart */}
           <span onClick={() => navigate('/cart')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
             🛒
-            {totalItems > 0 && (
-              <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
-                {totalItems}
-              </span>
-            )}
+            {totalItems > 0 && <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{totalItems}</span>}
           </span>
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
-              {role === 'seller' && (
-                <span onClick={() => navigate('/seller/dashboard')} style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>MY DASHBOARD</span>
-              )}
-              {user?.email === 'bikidutta319@gmail.com' && (
-                <span onClick={() => navigate('/admin')} style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>ADMIN ⚙️</span>
-              )}
+              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email?.split('@')[0] || user.phone}</span>
+              {role === 'seller' && <span onClick={() => navigate('/seller/dashboard')} style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>MY DASHBOARD</span>}
+              {user?.email === 'bikidutta319@gmail.com' && <span onClick={() => navigate('/admin')} style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>ADMIN ⚙️</span>}
               <button onClick={signOut} style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>SIGN OUT</button>
             </div>
           ) : (
@@ -135,9 +134,9 @@ export default function Products() {
       <div style={{ background: S.white, padding: '24px 40px 20px', borderBottom: `1px solid ${S.border}` }}>
         <p style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, marginBottom: '8px', fontFamily: S.sans }}>HOME / PRODUCTS</p>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-          <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark, letterSpacing: '-.02em' }}>All Products</h1>
+          <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark }}>All Products</h1>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input type="text" placeholder="Search products or artisans..." value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)}
               style={{ fontSize: '13px', padding: '8px 16px', border: `1px solid ${S.border}`, background: S.bg, color: S.dark, outline: 'none', width: '240px', fontFamily: S.sans }} />
             <select value={sort} onChange={e => setSort(e.target.value)}
               style={{ fontSize: '12px', padding: '8px 14px', border: `1px solid ${S.border}`, background: S.white, color: S.dark, outline: 'none', fontFamily: S.sans }}>
@@ -157,13 +156,13 @@ export default function Products() {
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>CATEGORIES</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
             {categories.map(c => (
-              <button key={c.name} onClick={() => setCat(c.name)}
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: cat === c.name ? `2px solid ${S.accent}` : '2px solid transparent', background: cat === c.name ? '#fef5f3' : 'transparent', color: cat === c.name ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
-                <span>{c.name}</span>
-                <span style={{ fontSize: '11px', color: '#b0a498' }}>{c.count}</span>
+              <button key={c} onClick={() => setCat(c)}
+                style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: cat === c ? `2px solid ${S.accent}` : '2px solid transparent', background: cat === c ? '#fef5f3' : 'transparent', color: cat === c ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
+                {c}
               </button>
             ))}
           </div>
+
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>BY STATE</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
             {states.map(s => (
@@ -173,8 +172,9 @@ export default function Products() {
               </button>
             ))}
           </div>
+
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>MAX PRICE</p>
-          <input type="range" min="300" max="5000" step="100" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
+          <input type="range" min="300" max="10000" step="100" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
             style={{ width: '100%', accentColor: S.accent, marginBottom: '6px' }} />
           <p style={{ fontSize: '12px', color: S.dark, fontFamily: S.sans }}>Up to {formatPrice(priceMax)}</p>
         </div>
@@ -182,65 +182,84 @@ export default function Products() {
         {/* Products grid */}
         <div style={{ paddingLeft: '36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>{filtered.length} products found</p>
-            {(cat !== 'All Products' || state !== 'All' || priceMax < 5000 || search) && (
-              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(5000); setSearch('') }}
+            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
+              {loading ? 'Loading...' : `${filtered.length} products found`}
+            </p>
+            {(cat !== 'All Products' || state !== 'All' || priceMax < 10000 || search) && (
+              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(10000); setSearch('') }}
                 style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
                 CLEAR FILTERS ×
               </button>
             )}
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+              {[1,2,3,4,5,6,7,8].map(i => (
+                <div key={i}>
+                  <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px' }} />
+                  <div style={{ height: '12px', background: S.border, borderRadius: '2px', marginBottom: '8px', width: '60%' }} />
+                  <div style={{ height: '10px', background: S.border, borderRadius: '2px', width: '80%' }} />
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 0' }}>
-              <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '12px' }}>No products match your filters.</p>
-              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(5000); setSearch('') }}
+              <p style={{ fontSize: '32px', marginBottom: '12px' }}>🔍</p>
+              <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '12px' }}>No products found.</p>
+              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(10000); setSearch('') }}
                 style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
                 CLEAR ALL FILTERS
               </button>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
-              {filtered.map(product => (
-                <div key={product.id} style={{ cursor: 'pointer' }} className="group">
-                  <div onClick={() => navigate(`/product/${product.id}`)}
-                    style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', position: 'relative', background: product.bg }}>
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform .4s cubic-bezier(.2,.8,.2,1)' }} className="group-hover:scale-105">
-                      <span style={{ fontSize: '48px', opacity: .6 }}>{product.emoji}</span>
-                    </div>
-                    {/* Sale badge */}
-                    {product.orig && <div style={{ position: 'absolute', top: '7px', left: '7px', background: S.accent, color: '#fff', fontSize: '9px', letterSpacing: '.1em', padding: '3px 7px', fontFamily: S.sans }}>SALE</div>}
-                    {/* Wishlist heart */}
-                    <button
-                      onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
-                      style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '13px' }}>
-                      {isWishlisted(product.id) ? '❤️' : '🤍'}
-                    </button>
-                    {/* Only X left */}
-                    {product.stock <= 3 && (
-                      <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', letterSpacing: '.08em', padding: '3px 7px', fontFamily: S.sans }}>
-                        ONLY {product.stock} LEFT
+              {filtered.map(product => {
+                const style = CAT_STYLE[product.category] || CAT_STYLE['Other']
+                const hasImage = product.images && product.images[0]
+                const wishlisted = isWishlisted(product.id)
+                return (
+                  <div key={product.id} style={{ cursor: 'pointer' }} className="group">
+                    <div onClick={() => navigate(`/product/${product.id}`)}
+                      style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', position: 'relative', background: style.bg }}>
+                      {hasImage ? (
+                        <img src={product.images[0]} alt={product.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform .4s' }}
+                          className="group-hover:scale-105" />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="group-hover:scale-105 transition-transform">
+                          <span style={{ fontSize: '48px', opacity: .5 }}>{style.emoji}</span>
+                        </div>
+                      )}
+                      {/* Wishlist */}
+                      <button onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
+                        style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '13px' }}>
+                        {wishlisted ? '❤️' : '🤍'}
+                      </button>
+                      {/* Only X left */}
+                      {product.stock <= 3 && product.stock > 0 && (
+                        <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', letterSpacing: '.08em', padding: '3px 7px', fontFamily: S.sans }}>
+                          ONLY {product.stock} LEFT
+                        </div>
+                      )}
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px', background: 'linear-gradient(0deg,rgba(26,18,8,.65) 0%,transparent 100%)', display: 'flex', justifyContent: 'center' }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span style={{ color: '#fff', fontSize: '10px', letterSpacing: '.15em', fontFamily: S.sans }}>QUICK VIEW</span>
                       </div>
-                    )}
-                    {/* Quick view */}
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px', background: 'linear-gradient(0deg,rgba(26,18,8,.65) 0%,transparent 100%)', display: 'flex', justifyContent: 'center' }} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span style={{ color: '#fff', fontSize: '10px', letterSpacing: '.15em', fontFamily: S.sans }}>QUICK VIEW</span>
+                    </div>
+                    <div onClick={() => navigate(`/product/${product.id}`)}>
+                      <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{product.state?.toUpperCase()}</p>
+                      <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '3px', lineHeight: 1.3 }}>{product.title}</p>
+                      <p style={{ fontSize: '11px', color: S.muted, marginBottom: '7px', fontFamily: S.sans }}>{product.category}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(product.price)}</span>
+                      </div>
+                      {product.stock <= 3 && product.stock > 0 && (
+                        <p style={{ fontSize: '11px', color: '#b91c1c', fontFamily: S.sans, marginTop: '4px' }}>Only {product.stock} left</p>
+                      )}
                     </div>
                   </div>
-                  <div onClick={() => navigate(`/product/${product.id}`)}>
-                    <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{product.state.toUpperCase()}</p>
-                    <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '3px', lineHeight: 1.3 }}>{product.name}</p>
-                    <p style={{ fontSize: '11px', color: S.muted, marginBottom: '7px', fontFamily: S.sans }}>by {product.seller} · {product.time}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(product.price)}</span>
-                      {product.orig && <span style={{ fontSize: '11px', color: '#b0a498', textDecoration: 'line-through', fontFamily: S.sans }}>{formatPrice(product.orig)}</span>}
-                    </div>
-                    {product.stock <= 3 && (
-                      <p style={{ fontSize: '11px', color: '#b91c1c', fontFamily: S.sans, marginTop: '4px' }}>Only {product.stock} left</p>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

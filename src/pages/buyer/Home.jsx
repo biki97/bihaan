@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
 import { useAuth }     from '../../context/AuthContext'
 import { useCart }     from '../../context/CartContext'
@@ -14,15 +15,15 @@ const S = {
 }
 
 const categories = [
-  { name: 'All Products',    count: 240 },
-  { name: 'Silk & Textiles', count: 48  },
-  { name: 'Handloom',        count: 62  },
-  { name: 'Bamboo Crafts',   count: 35  },
-  { name: 'Brass & Metal',   count: 29  },
-  { name: 'Tea & Spices',    count: 41  },
-  { name: 'Heritage Crafts', count: 33  },
-  { name: 'Pottery',         count: 18  },
-  { name: 'Jewellery',       count: 27  },
+  { name: 'All Products',    count: null },
+  { name: 'Silk & Textiles', count: null },
+  { name: 'Handloom',        count: null },
+  { name: 'Bamboo Crafts',   count: null },
+  { name: 'Brass & Metal',   count: null },
+  { name: 'Tea & Spices',    count: null },
+  { name: 'Heritage Crafts', count: null },
+  { name: 'Pottery',         count: null },
+  { name: 'Jewellery',       count: null },
 ]
 
 const states = [
@@ -30,16 +31,17 @@ const states = [
   'Arunachal Pradesh','Mizoram','Tripura','Sikkim'
 ]
 
-const featured = [
-  { id:1,  name:'Muga Silk Saree',      price:4500, orig:5200, seller:'Rekha Bora',   state:'Assam',             cat:'Silk & Textiles', bg:'#f9f0e8', emoji:'🧵', time:'4 days', stock:2  },
-  { id:2,  name:'Bamboo Pendant Lamp',  price:850,  orig:null, seller:'Mohan Das',    state:'Tripura',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'2 days', stock:12 },
-  { id:3,  name:'Xorai Brass Tray',     price:1200, orig:null, seller:'Dipali Gogoi', state:'Assam',             cat:'Brass & Metal',   bg:'#fdf7e3', emoji:'🏺', time:'3 days', stock:3  },
-  { id:4,  name:'Orthodox Gold Tea',    price:450,  orig:550,  seller:'Rahim Ali',    state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day',  stock:20 },
-  { id:5,  name:'Naga Warrior Shawl',   price:2800, orig:null, seller:'Leno Angami',  state:'Nagaland',          cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'6 days', stock:7  },
-  { id:6,  name:'Longpi Pottery Bowl',  price:650,  orig:null, seller:'Sana Devi',    state:'Manipur',           cat:'Pottery',         bg:'#fdf0e8', emoji:'🏛️', time:'2 days', stock:1  },
-  { id:7,  name:'Arunachal Wood Mask',  price:2200, orig:null, seller:'Tashi Dorje',  state:'Arunachal Pradesh', cat:'Heritage Crafts', bg:'#eef3f8', emoji:'🎨', time:'7 days', stock:5  },
-  { id:8,  name:'Tribal Silver Ring',   price:920,  orig:1100, seller:'Pemba Sherpa', state:'Sikkim',            cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'3 days', stock:3  },
-]
+const CAT_STYLE = {
+  'Silk & Textiles': { bg: '#f9f0e8', emoji: '🧵' },
+  'Handloom':        { bg: '#f3f0fb', emoji: '🪡' },
+  'Bamboo Crafts':   { bg: '#edf5ee', emoji: '🎋' },
+  'Brass & Metal':   { bg: '#fdf7e3', emoji: '🏺' },
+  'Tea & Spices':    { bg: '#fef5e7', emoji: '🍵' },
+  'Heritage Crafts': { bg: '#eef3f8', emoji: '🎨' },
+  'Pottery':         { bg: '#fdf0e8', emoji: '🏛️' },
+  'Jewellery':       { bg: '#fdf0f5', emoji: '💍' },
+  'Other':           { bg: '#f5f0e8', emoji: '🛍️' },
+}
 
 function CurrencyToggle() {
   const { currency, setCurrency } = useCurrency()
@@ -47,7 +49,7 @@ function CurrencyToggle() {
     <div style={{ display: 'flex', gap: '2px', background: '#f0e8e4', borderRadius: '4px', padding: '3px' }}>
       {['INR','USD','GBP','EUR'].map(c => (
         <button key={c} onClick={() => setCurrency(c)}
-          style={{ padding: '3px 7px', fontSize: '10px', letterSpacing: '.05em', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
+          style={{ padding: '3px 7px', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
           {c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'GBP' ? '£' : '€'}
         </button>
       ))}
@@ -59,32 +61,31 @@ function ProductCard({ product, navigate }) {
   const { toggleWishlist, isWishlisted } = useWishlist()
   const { formatPrice } = useCurrency()
   const wishlisted = isWishlisted(product.id)
+  const style = CAT_STYLE[product.category] || CAT_STYLE['Other']
+  const hasImage = product.images && product.images[0]
 
   return (
     <div onClick={() => navigate(`/product/${product.id}`)} style={{ cursor: 'pointer' }} className="group">
-      <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', position: 'relative', background: product.bg }}>
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform .4s cubic-bezier(.2,.8,.2,1)' }}
-          className="group-hover:scale-105">
-          <span style={{ fontSize: '48px', opacity: .6 }}>{product.emoji}</span>
-        </div>
-
-        {/* Sale badge */}
-        {product.orig && (
-          <div style={{ position: 'absolute', top: '7px', left: '7px', background: S.accent, color: '#fff', fontSize: '9px', letterSpacing: '.1em', padding: '3px 7px', fontFamily: S.sans }}>
-            SALE
+      <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', position: 'relative', background: style.bg }}>
+        {hasImage ? (
+          <img src={product.images[0]} alt={product.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform .4s cubic-bezier(.2,.8,.2,1)' }}
+            className="group-hover:scale-105" />
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            className="group-hover:scale-105 transition-transform">
+            <span style={{ fontSize: '48px', opacity: .5 }}>{style.emoji}</span>
           </div>
         )}
 
-        {/* Wishlist heart */}
-        <button
-          onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
-          style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px', transition: 'transform .2s' }}
-          className="hover:scale-110">
+        {/* Wishlist */}
+        <button onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
+          style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px' }}>
           {wishlisted ? '❤️' : '🤍'}
         </button>
 
         {/* Only X left */}
-        {product.stock <= 3 && (
+        {product.stock <= 3 && product.stock > 0 && (
           <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', letterSpacing: '.08em', padding: '3px 7px', fontFamily: S.sans }}>
             ONLY {product.stock} LEFT
           </div>
@@ -97,13 +98,10 @@ function ProductCard({ product, navigate }) {
         </div>
       </div>
 
-      <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{product.state.toUpperCase()}</p>
-      <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '3px', lineHeight: 1.3 }}>{product.name}</p>
-      <p style={{ fontSize: '11px', color: S.muted, marginBottom: '7px', fontFamily: S.sans }}>by {product.seller} · {product.time} to make</p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-        <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(product.price)}</span>
-        {product.orig && <span style={{ fontSize: '11px', color: '#b0a498', textDecoration: 'line-through', fontFamily: S.sans }}>{formatPrice(product.orig)}</span>}
-      </div>
+      <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{product.state?.toUpperCase()}</p>
+      <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '3px', lineHeight: 1.3 }}>{product.title}</p>
+      <p style={{ fontSize: '11px', color: S.muted, marginBottom: '7px', fontFamily: S.sans }}>{product.category}</p>
+      <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(product.price)}</span>
     </div>
   )
 }
@@ -118,75 +116,41 @@ function NavBar({ navigate }) {
       <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
         <Logo size={36} showText={true} />
       </div>
-
       <div style={{ display: 'flex', gap: '28px' }}>
         {['Products','Artisans','Our Story','States'].map(item => (
-          <span key={item}
-            onClick={() => item === 'Products' && navigate('/products')}
-            style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>
-            {item}
-          </span>
+          <span key={item} onClick={() => item === 'Products' && navigate('/products')}
+            style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
         ))}
       </div>
-
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        {/* Currency toggle */}
         <CurrencyToggle />
-
-        {/* Sell with us */}
         <span onClick={() => navigate('/seller/register')}
-          style={{ fontSize: '12px', color: S.accent, letterSpacing: '.08em', cursor: 'pointer', fontFamily: S.sans }}>
-          SELL
-        </span>
-
-        {/* Wishlist */}
-        <span onClick={() => navigate('/wishlist')}
-          style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+          style={{ fontSize: '12px', color: S.accent, letterSpacing: '.08em', cursor: 'pointer', fontFamily: S.sans }}>SELL</span>
+        <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
           🤍
           {wishlist.length > 0 && (
-            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
-              {wishlist.length}
-            </span>
+            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{wishlist.length}</span>
           )}
         </span>
-
-        {/* Cart */}
-        <span onClick={() => navigate('/cart')}
-          style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+        <span onClick={() => navigate('/cart')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
           🛒
           {totalItems > 0 && (
-            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
-              {totalItems}
-            </span>
+            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{totalItems}</span>
           )}
         </span>
-
-        {/* Auth */}
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
+            <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email?.split('@')[0] || user.phone}</span>
             {role === 'seller' && (
-              <span onClick={() => navigate('/seller/dashboard')}
-                style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                MY DASHBOARD
-              </span>
+              <span onClick={() => navigate('/seller/dashboard')} style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>MY DASHBOARD</span>
             )}
             {user?.email === 'bikidutta319@gmail.com' && (
-              <span onClick={() => navigate('/admin')}
-                style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                ADMIN ⚙️
-              </span>
+              <span onClick={() => navigate('/admin')} style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>ADMIN ⚙️</span>
             )}
-            <button onClick={signOut}
-              style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
-              SIGN OUT
-            </button>
+            <button onClick={signOut} style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>SIGN OUT</button>
           </div>
         ) : (
-          <button onClick={() => navigate('/login')}
-            style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-            SIGN IN
-          </button>
+          <button onClick={() => navigate('/login')} style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>SIGN IN</button>
         )}
       </div>
     </nav>
@@ -195,19 +159,34 @@ function NavBar({ navigate }) {
 
 export default function Home() {
   const navigate = useNavigate()
-  const [selectedState, setSelectedState] = useState(null)
+  const [products,       setProducts]       = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [selectedState,  setSelectedState]  = useState(null)
   const [recentlyViewed, setRecentlyViewed] = useState([])
 
   useEffect(() => {
+    loadProducts()
     try {
       const viewed = JSON.parse(localStorage.getItem('bihaan_viewed') || '[]')
       setRecentlyViewed(viewed)
     } catch {}
   }, [])
 
+  async function loadProducts() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(8)
+    setProducts(data || [])
+    setLoading(false)
+  }
+
   const displayProducts = selectedState
-    ? featured.filter(p => p.state === selectedState)
-    : featured
+    ? products.filter(p => p.state === selectedState)
+    : products
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
@@ -240,45 +219,53 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Hero product showcase */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <div onClick={() => navigate('/product/1')}
-            style={{ gridColumn: 'span 2', background: '#f9f0e8', borderRadius: '4px', padding: '18px', height: '190px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-            className="hover:-translate-y-1 transition-transform">
-            <div>
-              <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '4px', fontFamily: S.sans }}>ASSAM · SILK & TEXTILES</p>
-              <p style={{ fontFamily: S.serif, fontSize: '17px', color: S.dark }}>Muga Silk Saree</p>
+          {products.slice(0, 3).map((p, i) => {
+            const style = CAT_STYLE[p.category] || CAT_STYLE['Other']
+            const hasImage = p.images && p.images[0]
+            return (
+              <div key={p.id}
+                onClick={() => navigate(`/product/${p.id}`)}
+                style={{ gridColumn: i === 0 ? 'span 2' : 'span 1', background: style.bg, borderRadius: '4px', padding: '18px', height: i === 0 ? '190px' : '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+                className="hover:-translate-y-1 transition-transform">
+                <div>
+                  <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '4px', fontFamily: S.sans }}>{p.state?.toUpperCase()} · {p.category?.toUpperCase()}</p>
+                  <p style={{ fontFamily: S.serif, fontSize: i === 0 ? '17px' : '15px', color: S.dark }}>{p.title}</p>
+                </div>
+                <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹{Number(p.price).toLocaleString()}</p>
+                {hasImage ? (
+                  <img src={p.images[0]} alt={p.title}
+                    style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: '45%', objectFit: 'cover', opacity: .5 }} />
+                ) : (
+                  <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: i === 0 ? '52px' : '36px', opacity: .45 }}>{style.emoji}</span>
+                )}
+              </div>
+            )
+          })}
+          {/* Fallback if no products yet */}
+          {products.length === 0 && [
+            { bg: '#f9f0e8', emoji: '🧵', label: 'ASSAM · SILK & TEXTILES', title: 'Muga Silk Saree', price: '4,500', span: 2, h: '190px' },
+            { bg: '#edf5ee', emoji: '🎋', label: 'TRIPURA', title: 'Bamboo Lamp', price: '850', span: 1, h: '150px' },
+            { bg: '#fdf7e3', emoji: '🏺', label: 'ASSAM', title: 'Xorai Tray', price: '1,200', span: 1, h: '150px' },
+          ].map((item, i) => (
+            <div key={i}
+              style={{ gridColumn: `span ${item.span}`, background: item.bg, borderRadius: '4px', padding: '18px', height: item.h, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
+              <div>
+                <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '4px', fontFamily: S.sans }}>{item.label}</p>
+                <p style={{ fontFamily: S.serif, fontSize: item.span === 2 ? '17px' : '15px', color: S.dark }}>{item.title}</p>
+              </div>
+              <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹{item.price}</p>
+              <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: item.span === 2 ? '52px' : '36px', opacity: .45 }}>{item.emoji}</span>
             </div>
-            <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹4,500</p>
-            <span style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '52px', opacity: .45 }}>🧵</span>
-          </div>
-          <div onClick={() => navigate('/product/2')}
-            style={{ background: '#edf5ee', borderRadius: '4px', padding: '18px', height: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-            className="hover:-translate-y-1 transition-transform">
-            <div>
-              <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '4px', fontFamily: S.sans }}>TRIPURA</p>
-              <p style={{ fontFamily: S.serif, fontSize: '15px', color: S.dark }}>Bamboo Lamp</p>
-            </div>
-            <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹850</p>
-            <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '36px', opacity: .45 }}>🎋</span>
-          </div>
-          <div onClick={() => navigate('/product/3')}
-            style={{ background: '#fdf7e3', borderRadius: '4px', padding: '18px', height: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-            className="hover:-translate-y-1 transition-transform">
-            <div>
-              <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '4px', fontFamily: S.sans }}>ASSAM</p>
-              <p style={{ fontFamily: S.serif, fontSize: '15px', color: S.dark }}>Xorai Tray</p>
-            </div>
-            <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹1,200</p>
-            <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '36px', opacity: .45 }}>🏺</span>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* States strip */}
       <div style={{ background: S.accent, padding: '11px 40px', display: 'flex', gap: '28px', justifyContent: 'center', overflowX: 'auto' }}>
         {['All', ...states].map(s => (
-          <span key={s}
-            onClick={() => setSelectedState(s === 'All' ? null : s)}
+          <span key={s} onClick={() => setSelectedState(s === 'All' ? null : s)}
             style={{ color: '#fff', fontSize: '11px', letterSpacing: '.12em', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: S.sans, opacity: (selectedState === s || (s === 'All' && !selectedState)) ? 1 : .65, borderBottom: (selectedState === s || (s === 'All' && !selectedState)) ? '1px solid #fff' : 'none', paddingBottom: '2px' }}>
             {s.toUpperCase()}
           </span>
@@ -287,6 +274,7 @@ export default function Home() {
 
       {/* Main */}
       <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 0, maxWidth: '1280px', margin: '0 auto', padding: '36px 40px' }}>
+        {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>CATEGORIES</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
@@ -294,7 +282,6 @@ export default function Home() {
               <button key={cat.name} onClick={() => navigate(`/products?category=${cat.name}`)}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: i === 0 ? `2px solid ${S.accent}` : '2px solid transparent', background: i === 0 ? '#fef5f3' : 'transparent', color: i === 0 ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
                 <span>{cat.name}</span>
-                <span style={{ fontSize: '11px', color: '#b0a498' }}>{cat.count}</span>
               </button>
             ))}
           </div>
@@ -309,10 +296,11 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Products */}
         <div style={{ paddingLeft: '36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
-              {selectedState ? `Products from ${selectedState}` : 'Featured products'}
+              {loading ? 'Loading...' : selectedState ? `Products from ${selectedState}` : `${products.length} products`}
             </p>
             <button onClick={() => navigate(selectedState ? `/products?state=${selectedState}` : '/products')}
               style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
@@ -320,12 +308,28 @@ export default function Home() {
             </button>
           </div>
 
-          {displayProducts.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', gridColumn: 'span 4' }}>
-              <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '12px' }}>No featured products from {selectedState} yet.</p>
-              <button onClick={() => navigate(`/products?state=${selectedState}`)}
-                style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '8px 20px', cursor: 'pointer', fontFamily: S.sans }}>
-                BROWSE ALL {selectedState?.toUpperCase()} PRODUCTS →
+          {loading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+              {[1,2,3,4,5,6,7,8].map(i => (
+                <div key={i}>
+                  <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px', animation: 'pulse 1.5s infinite' }} />
+                  <div style={{ height: '12px', background: S.border, borderRadius: '2px', marginBottom: '8px', width: '60%' }} />
+                  <div style={{ height: '10px', background: S.border, borderRadius: '2px', width: '80%' }} />
+                </div>
+              ))}
+            </div>
+          ) : displayProducts.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0' }}>
+              <p style={{ fontSize: '32px', marginBottom: '12px' }}>🛍️</p>
+              <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark, marginBottom: '8px' }}>
+                {selectedState ? `No products from ${selectedState} yet` : 'No products yet'}
+              </p>
+              <p style={{ fontSize: '13px', color: S.muted, marginBottom: '20px', fontFamily: S.sans }}>
+                Be the first artisan to list products from this region
+              </p>
+              <button onClick={() => navigate('/seller/register')}
+                style={{ background: S.accent, color: '#fff', padding: '12px 28px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                START SELLING
               </button>
             </div>
           ) : (
@@ -340,21 +344,19 @@ export default function Home() {
       {recentlyViewed.length > 0 && (
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 40px' }}>
           <div style={{ borderTop: `1px solid ${S.border}`, paddingTop: '32px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark }}>
-                Recently viewed
-              </h2>
-            </div>
+            <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>Recently viewed</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
               {recentlyViewed.slice(0, 4).map(p => (
                 <div key={p.id} onClick={() => navigate(`/product/${p.id}`)} style={{ cursor: 'pointer' }} className="group">
-                  <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    className="group-hover:opacity-90 transition-opacity">
-                    <span style={{ fontSize: '40px', opacity: .6 }}>{p.emoji}</span>
+                  <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px', background: (CAT_STYLE[p.category] || CAT_STYLE['Other']).bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {p.images?.[0]
+                      ? <img src={p.images[0]} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: '40px', opacity: .6 }}>{(CAT_STYLE[p.category] || CAT_STYLE['Other']).emoji}</span>
+                    }
                   </div>
                   <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '2px', fontFamily: S.sans }}>{p.state?.toUpperCase()}</p>
-                  <p style={{ fontFamily: S.serif, fontSize: '13px', color: S.dark, marginBottom: '4px' }}>{p.name}</p>
-                  <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹{p.price?.toLocaleString()}</p>
+                  <p style={{ fontFamily: S.serif, fontSize: '13px', color: S.dark, marginBottom: '4px' }}>{p.title}</p>
+                  <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹{Number(p.price).toLocaleString()}</p>
                 </div>
               ))}
             </div>
@@ -366,8 +368,8 @@ export default function Home() {
       <div style={{ background: S.dark, margin: '0 40px 40px', padding: '52px 64px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', alignItems: 'center', borderRadius: '4px' }}>
         <div>
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.gold, marginBottom: '14px', fontFamily: S.sans }}>THE BIHAAN PROMISE</p>
-          <h2 style={{ fontFamily: S.serif, fontSize: '34px', fontWeight: 400, color: '#fff', lineHeight: 1.2, marginBottom: '14px', letterSpacing: '-.01em' }}>
-            Every purchase<br /><em style={{ fontStyle: 'italic', color: S.gold }}>empowers</em> a maker
+          <h2 style={{ fontFamily: S.serif, fontSize: '34px', fontWeight: 400, color: '#fff', lineHeight: 1.2, marginBottom: '14px' }}>
+            Every purchase<br /><em style={{ color: S.gold }}>empowers</em> a maker
           </h2>
           <p style={{ fontSize: '13px', color: '#888', lineHeight: 1.8, fontFamily: S.sans }}>
             Behind every item on Bihaan is a real person — an artisan who has spent decades mastering their craft.
@@ -392,7 +394,6 @@ export default function Home() {
         </div>
         <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>© 2026 BIHAAN · NORTHEAST INDIA</p>
       </footer>
-
     </div>
   )
 }
