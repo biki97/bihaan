@@ -120,8 +120,11 @@ export default function Cart() {
               {cart.map(item => (
                 <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '16px', padding: '20px 0', borderBottom: `1px solid ${S.border}`, alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <div style={{ width: '72px', height: '72px', borderRadius: '3px', background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span style={{ fontSize: '28px', opacity: .6 }}>{item.emoji}</span>
+                    <div style={{ width: '72px', height: '72px', borderRadius: '3px', background: item.bg || '#f8f4ef', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                      {item.images?.[0]
+                        ? <img src={item.images[0]} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <span style={{ fontSize: '28px', opacity: .6 }}>{item.emoji || '🛍️'}</span>
+                      }
                     </div>
                     <div>
                       <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{item.state?.toUpperCase()}</p>

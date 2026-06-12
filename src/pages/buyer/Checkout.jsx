@@ -230,8 +230,11 @@ export default function Checkout() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${S.border}` }}>
             {cart.map(item => (
               <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <div style={{ width: '48px', height: '48px', background: item.bg, borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ fontSize: '20px', opacity: .6 }}>{item.emoji}</span>
+                <div style={{ width: '48px', height: '48px', background: item.bg || '#f8f4ef', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                  {item.images?.[0]
+                    ? <img src={item.images[0]} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: '20px', opacity: .6 }}>{item.emoji || '🛍️'}</span>
+                  }
                 </div>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, marginBottom: '2px' }}>{item.name}</p>

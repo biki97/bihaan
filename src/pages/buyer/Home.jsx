@@ -277,46 +277,47 @@ export default function Home() {
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
 
-          {/* States list */}
+          {/* States accordion */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>BY STATE</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
-            {['All', ...states].map((s, i) => (
-              <button key={s}
-                onClick={() => setSelectedState(s === 'All' ? null : s)}
-                style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: (s === 'All' && !selectedState) || selectedState === s ? `2px solid ${S.accent}` : '2px solid transparent', background: (s === 'All' && !selectedState) || selectedState === s ? '#fef5f3' : 'transparent', color: (s === 'All' && !selectedState) || selectedState === s ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
-                {s}
-              </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+
+            {/* All */}
+            <button onClick={() => setSelectedState(null)}
+              style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: !selectedState ? `2px solid ${S.accent}` : '2px solid transparent', background: !selectedState ? '#fef5f3' : 'transparent', color: !selectedState ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
+              All States
+            </button>
+
+            {/* Each state with accordion */}
+            {states.map(s => (
+              <div key={s}>
+                {/* State button */}
+                <button
+                  onClick={() => setSelectedState(selectedState === s ? null : s)}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: selectedState === s ? `2px solid ${S.accent}` : '2px solid transparent', background: selectedState === s ? '#fef5f3' : 'transparent', color: selectedState === s ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
+                  <span>{s}</span>
+                  <span style={{ fontSize: '10px', color: S.muted }}>{selectedState === s ? '▲' : '▼'}</span>
+                </button>
+
+                {/* Categories — expand when state is selected */}
+                {selectedState === s && (
+                  <div style={{ background: '#fef9f7', borderLeft: `2px solid ${S.accent}`, marginBottom: '4px' }}>
+                    {[
+                      'All Categories',
+                      'Silk & Textiles', 'Handloom', 'Bamboo Crafts',
+                      'Brass & Metal', 'Tea & Spices', 'Heritage Crafts',
+                      'Pottery', 'Jewellery', 'Other'
+                    ].map((catName, i) => (
+                      <button key={catName}
+                        onClick={() => navigate(`/products?state=${s}${catName !== 'All Categories' ? `&category=${encodeURIComponent(catName)}` : ''}`)}
+                        style={{ display: 'block', width: '100%', padding: '6px 10px 6px 18px', fontSize: '12px', cursor: 'pointer', border: 'none', background: 'transparent', color: i === 0 ? S.accent : S.muted, textAlign: 'left', fontFamily: S.sans, fontWeight: i === 0 ? 500 : 400 }}>
+                        {i === 0 ? `All in ${s}` : catName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
-
-          {/* Categories — only show when state is selected */}
-          {selectedState && (
-            <>
-              <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>
-                CATEGORIES IN {selectedState.toUpperCase()}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                {['All Categories', ...categories.slice(1).filter(cat =>
-                  products.some(p => p.state === selectedState && p.category === cat.name)
-                ).map(c => c.name)].map((catName, i) => (
-                  <button key={catName}
-                    onClick={() => navigate(`/products?state=${selectedState}&category=${catName === 'All Categories' ? '' : catName}`)}
-                    style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: i === 0 ? `2px solid ${S.accent}` : '2px solid transparent', background: i === 0 ? '#fef5f3' : 'transparent', color: i === 0 ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
-                    {catName}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Prompt when no state selected */}
-          {!selectedState && (
-            <div style={{ padding: '16px 10px', borderTop: `1px solid ${S.border}` }}>
-              <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, lineHeight: 1.6 }}>
-                Select a state to browse categories from that region
-              </p>
-            </div>
-          )}
 
         </div>
 
