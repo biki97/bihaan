@@ -42,3 +42,25 @@
 - buyer — regular customer
 - seller — artisan (has sellers table row)
 - admin — bikidutta319@gmail.com only
+
+## New Features Added
+- Multi-currency toggle (INR/USD/GBP/EUR) — hardcoded rates, in all navbars
+- Wishlist — localStorage, persists without login, /wishlist page
+- "Only X left" — shows when stock <= 3, on all product cards
+- Recently viewed — localStorage, shows on Home + ProductDetail
+
+## New Context Files
+- src/context/WishlistContext.jsx
+- src/context/CurrencyContext.jsx
+
+## New Pages
+- src/pages/buyer/Wishlist.jsx — /wishlist route
+
+## Category rename
+- "Tribal Crafts" → "Heritage Crafts" across all files
+
+## Exchange Rates (hardcoded — update periodically)
+- USD: 0.012 (1 INR = 0.012 USD)
+- GBP: 0.0095
+- EUR: 0.011
+- File to update: src/context/CurrencyContext.jsx
