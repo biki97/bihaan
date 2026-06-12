@@ -13,11 +13,11 @@ const S = {
 }
 
 export default function Checkout() {
-  const navigate                              = useNavigate()
-  const { cart, totalAmount, clearCart }      = useCart()
-  const { user }                              = useAuth()
-  const [loading, setLoading]                 = useState(false)
-  const [form,    setForm]                    = useState({
+  const navigate                         = useNavigate()
+  const { cart, totalAmount, clearCart } = useCart()
+  const { user }                         = useAuth()
+  const [loading, setLoading]            = useState(false)
+  const [form,    setForm]               = useState({
     name: '', phone: '', address: '',
     city: '', state: '', pincode: ''
   })
@@ -68,25 +68,54 @@ export default function Checkout() {
     setLoading(true)
 
     const options = {
-      key:    import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: total * 100,
+      key:      import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount:   total * 100,
       currency: 'INR',
-      name: 'Bihaan',
+      name:     'Bihaan',
       description: `Order of ${cart.length} item${cart.length > 1 ? 's' : ''}`,
+
       handler: async function (response) {
         await saveOrder(response.razorpay_payment_id, response.razorpay_order_id || 'test')
+
+        // Send emails
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type:       'order_confirmation',
+              buyerEmail: user?.email,
+              buyerName:  form.name,
+              order:      { total },
+              items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
+            })
+          })
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type:       'new_order_seller',
+              buyerEmail: user?.email,
+              buyerName:  form.name,
+              order:      { total },
+              items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
+            })
+          })
+        } catch (emailErr) {
+          console.log('Email failed silently:', emailErr)
+        }
+
         clearCart()
         navigate('/order-success')
       },
+
       prefill: {
         name:    form.name,
         contact: form.phone,
         email:   user?.email || '',
       },
       theme: { color: '#8b2500' },
-      modal: {
-        ondismiss: () => setLoading(false)
-      }
+      modal: { ondismiss: () => setLoading(false) }
     }
 
     const rzp = new window.Razorpay(options)
@@ -111,12 +140,10 @@ export default function Checkout() {
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
 
-      {/* Top bar */}
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         SECURE CHECKOUT · AUTHENTIC NORTHEAST INDIA
       </div>
 
-      {/* Nav */}
       <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
@@ -130,7 +157,6 @@ export default function Checkout() {
         </button>
       </nav>
 
-      {/* Breadcrumb */}
       <div style={{ padding: '14px 40px', background: S.white, borderBottom: `1px solid ${S.border}` }}>
         <p style={{ fontSize: '11px', letterSpacing: '.08em', color: S.muted, fontFamily: S.sans }}>
           CART → <span style={{ color: S.accent }}>DELIVERY</span> → PAYMENT
@@ -139,14 +165,13 @@ export default function Checkout() {
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '40px', alignItems: 'start' }}>
 
-        {/* Left — delivery form */}
+        {/* Delivery form */}
         <div>
           <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>
             Delivery details
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
@@ -184,29 +209,24 @@ export default function Checkout() {
                   style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.white, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
               </div>
             </div>
-
           </div>
 
-          {/* Payment info */}
           <div style={{ marginTop: '32px', padding: '20px', background: S.white, border: `1px solid ${S.border}` }}>
             <p style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, marginBottom: '12px', fontFamily: S.sans }}>ACCEPTED PAYMENTS</p>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallets'].map(p => (
-                <span key={p} style={{ fontSize: '11px', padding: '4px 10px', border: `1px solid ${S.border}`, color: S.muted, fontFamily: S.sans }}>
-                  {p}
-                </span>
+                <span key={p} style={{ fontSize: '11px', padding: '4px 10px', border: `1px solid ${S.border}`, color: S.muted, fontFamily: S.sans }}>{p}</span>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Right — order summary */}
+        {/* Order summary */}
         <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px', position: 'sticky', top: '80px' }}>
           <h2 style={{ fontFamily: S.serif, fontSize: '1.3rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>
             Order summary
           </h2>
 
-          {/* Items */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${S.border}` }}>
             {cart.map(item => (
               <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -224,7 +244,6 @@ export default function Checkout() {
             ))}
           </div>
 
-          {/* Totals */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${S.border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontFamily: S.sans }}>
               <span style={{ color: S.muted }}>Subtotal</span>
