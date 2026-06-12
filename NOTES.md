@@ -64,3 +64,10 @@
 - GBP: 0.0095
 - EUR: 0.011
 - File to update: src/context/CurrencyContext.jsx
+
+## Exchange Rates
+- Live rates via open.er-api.com (free, no API key)
+- Cached in localStorage for 24 hours
+- Auto-refreshes every 24 hours
+- Fallback to hardcoded rates if API fails
+- File: src/context/CurrencyContext.jsx
