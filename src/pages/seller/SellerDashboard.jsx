@@ -27,6 +27,30 @@ const timeOptions = [
   '5 days', '1 week', '2 weeks', '1 month'
 ]
 
+// ── Cloudinary upload ──
+async function uploadToCloudinary(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET)
+  formData.append('folder', 'bihaan')
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData }
+  )
+  const data = await response.json()
+  if (!data.public_id) throw new Error('Upload failed')
+  return data
+}
+
+// ── Build AI-enhanced URL from public_id ──
+function getEnhancedUrl(publicId) {
+  const cloud = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+  // e_improve = AI improvement, e_sharpen = sharpening, e_vibrance = color boost
+  // q_auto = auto quality, f_auto = best format, w_800,h_1067,c_fill = 3:4 ratio
+  return `https://res.cloudinary.com/${cloud}/image/upload/e_improve,e_sharpen:80,e_vibrance:20,q_auto,f_auto,w_800,h_1067,c_fill/${publicId}`
+}
+
 // ── AI Listing Generator ──
 async function generateListing(inputs) {
   const prompt = `You are helping an artisan from Northeast India list their handmade product on Bihaan marketplace.
@@ -53,7 +77,6 @@ Respond ONLY with a valid JSON object, no markdown:
   const isDev = window.location.hostname === 'localhost'
 
   if (isDev) {
-    // Direct Gemini call for local development
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`,
       {
@@ -74,7 +97,6 @@ Respond ONLY with a valid JSON object, no markdown:
     const clean = text.replace(/```json|```/g, '').trim()
     return JSON.parse(clean)
   } else {
-    // Serverless function for Vercel production
     const response = await fetch('/api/generate-listing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -97,6 +119,8 @@ export default function SellerDashboard() {
   const [aiLoading,    setAiLoading]    = useState(false)
   const [aiResult,     setAiResult]     = useState(null)
   const [saveLoading,  setSaveLoading]  = useState(false)
+  const [uploadedImages, setUploadedImages] = useState([])
+  const [uploadingImages, setUploadingImages] = useState(false)
 
   const [aiInputs, setAiInputs] = useState({
     artisanName: '', village: '', state: '',
@@ -117,22 +141,43 @@ export default function SellerDashboard() {
   async function loadData() {
     setLoading(true)
     const { data: sellerData } = await supabase
-      .from('sellers')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-
+      .from('sellers').select('*').eq('user_id', user.id).single()
     if (!sellerData) { navigate('/seller/register'); return }
     setSeller(sellerData)
-
     const { data: prods } = await supabase
-      .from('products')
-      .select('*')
-      .eq('seller_id', sellerData.id)
+      .from('products').select('*').eq('seller_id', sellerData.id)
       .order('created_at', { ascending: false })
-
     setProducts(prods || [])
     setLoading(false)
+  }
+
+  // ── Handle image upload ──
+  async function handleImageUpload(e) {
+    const files = Array.from(e.target.files).slice(0, 4 - uploadedImages.length)
+    if (files.length === 0) return
+    setUploadingImages(true)
+    const newImages = []
+    for (const file of files) {
+      try {
+        const data = await uploadToCloudinary(file)
+        const enhanced = getEnhancedUrl(data.public_id)
+        newImages.push({
+          publicId: data.public_id,
+          original: data.secure_url,
+          enhanced,
+        })
+      } catch (err) {
+        alert('Image upload failed: ' + err.message)
+      }
+    }
+    setUploadedImages(prev => [...prev, ...newImages])
+    setUploadingImages(false)
+    // Reset input so same file can be re-uploaded if needed
+    e.target.value = ''
+  }
+
+  function removeImage(index) {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index))
   }
 
   async function handleGenerateListing() {
@@ -155,7 +200,6 @@ export default function SellerDashboard() {
       }))
     } catch (err) {
       alert('AI generation failed: ' + err.message)
-      console.error(err)
     } finally {
       setAiLoading(false)
     }
@@ -176,10 +220,12 @@ export default function SellerDashboard() {
         stock:       Number(productForm.stock),
         category:    productForm.category,
         state:       productForm.state,
+        images:      uploadedImages.map(img => img.enhanced),
         is_active:   true,
       })
       if (error) throw error
       setAiResult(null)
+      setUploadedImages([])
       setAiInputs({ artisanName:'', village:'', state:'', experience:'', productName:'', category:'', material:'', timeTomake:'', technique:'' })
       setProductForm({ title:'', description:'', price:'', stock:'', category:'', state:'' })
       setTab('products')
@@ -273,20 +319,28 @@ export default function SellerDashboard() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
                 {products.map(p => (
-                  <div key={p.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '10px', letterSpacing: '.1em', color: p.is_active ? '#2d6a4f' : S.muted, fontFamily: S.sans }}>
-                        {p.is_active ? '● ACTIVE' : '○ INACTIVE'}
-                      </span>
-                      <span style={{ fontSize: '10px', color: S.muted, fontFamily: S.sans }}>{p.category}</span>
-                    </div>
-                    <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '6px' }}>{p.title}</p>
-                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginBottom: '12px', lineHeight: 1.5 }}>
-                      {p.description?.substring(0, 80)}...
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>₹{Number(p.price).toLocaleString()}</span>
-                      <span style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Stock: {p.stock}</span>
+                  <div key={p.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '0', borderRadius: '3px', overflow: 'hidden' }}>
+                    {/* Product image */}
+                    {p.images && p.images[0] ? (
+                      <img src={p.images[0]} alt={p.title}
+                        style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <div style={{ width: '100%', aspectRatio: '3/4', background: S.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <p style={{ fontSize: '32px', opacity: .3 }}>📷</p>
+                      </div>
+                    )}
+                    <div style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '10px', letterSpacing: '.1em', color: p.is_active ? '#2d6a4f' : S.muted, fontFamily: S.sans }}>
+                          {p.is_active ? '● ACTIVE' : '○ INACTIVE'}
+                        </span>
+                        <span style={{ fontSize: '10px', color: S.muted, fontFamily: S.sans }}>{p.category}</span>
+                      </div>
+                      <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '6px' }}>{p.title}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>₹{Number(p.price).toLocaleString()}</span>
+                        <span style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Stock: {p.stock}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -299,64 +353,140 @@ export default function SellerDashboard() {
         {tab === 'add' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
 
-            {/* Left — AI inputs */}
-            <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <div style={{ width: '32px', height: '32px', background: S.accent, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✨</div>
-                <div>
-                  <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>AI Listing Generator</p>
-                  <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Fill in simple details — AI writes the listing</p>
+            {/* Left — Image upload + AI inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Image upload */}
+              <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                  <div style={{ width: '32px', height: '32px', background: '#2d6a4f', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>📸</div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>Product Photos</p>
+                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>AI will enhance your photos automatically</p>
+                  </div>
                 </div>
+
+                {/* Upload area */}
+                {uploadedImages.length < 4 && (
+                  <div
+                    onClick={() => document.getElementById('image-upload').click()}
+                    style={{ border: `2px dashed ${S.border}`, padding: '28px', textAlign: 'center', cursor: 'pointer', background: S.bg, marginBottom: uploadedImages.length > 0 ? '16px' : '0', transition: 'border-color .2s' }}
+                    onMouseOver={e => e.currentTarget.style.borderColor = S.accent}
+                    onMouseOut={e => e.currentTarget.style.borderColor = S.border}>
+                    {uploadingImages ? (
+                      <>
+                        <p style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</p>
+                        <p style={{ fontSize: '13px', color: S.accent, fontFamily: S.sans }}>Uploading & enhancing...</p>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: '28px', marginBottom: '8px' }}>📷</p>
+                        <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, marginBottom: '4px' }}>Click to upload photos</p>
+                        <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>JPG, PNG up to 10MB · Up to 4 photos</p>
+                        <p style={{ fontSize: '11px', color: S.accent, fontFamily: S.sans, marginTop: '8px' }}>✨ AI will enhance quality automatically</p>
+                      </>
+                    )}
+                    <input
+                      id="image-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={handleImageUpload}
+                      disabled={uploadingImages} />
+                  </div>
+                )}
+
+                {/* Image previews */}
+                {uploadedImages.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>
+                      {uploadedImages.length}/4 PHOTOS · AI ENHANCED ✓
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+                      {uploadedImages.map((img, i) => (
+                        <div key={i} style={{ position: 'relative', aspectRatio: '3/4', borderRadius: '3px', overflow: 'hidden', border: i === 0 ? `2px solid ${S.accent}` : `1px solid ${S.border}` }}>
+                          <img src={img.enhanced} alt=""
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#2d6a4f', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans, letterSpacing: '.05em' }}>
+                            ✓ AI
+                          </div>
+                          <button
+                            onClick={() => removeImage(i)}
+                            style={{ position: 'absolute', top: '4px', left: '4px', background: 'rgba(139,37,0,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                            ×
+                          </button>
+                          {i === 0 && (
+                            <div style={{ position: 'absolute', bottom: '4px', left: '4px', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans }}>
+                              MAIN
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {[
-                  ['artisanName', 'ARTISAN NAME *',            'e.g. Rekha Bora'],
-                  ['village',     'VILLAGE / DISTRICT *',      'e.g. Sualkuchi'],
-                  ['experience',  'YEARS OF EXPERIENCE *',     'e.g. 25 years'],
-                  ['productName', 'PRODUCT NAME *',            'e.g. Muga Silk Saree'],
-                  ['material',    'MATERIAL USED *',           'e.g. Pure Muga silk'],
-                  ['technique',   'SPECIAL TECHNIQUE (optional)', 'e.g. Hand-loomed'],
-                ].map(([name, label, placeholder]) => (
-                  <div key={name}>
-                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>{label}</label>
-                    <input type="text" name={name} value={aiInputs[name]} onChange={handleAiInput}
-                      placeholder={placeholder}
-                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+              {/* AI Listing Generator */}
+              <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                  <div style={{ width: '32px', height: '32px', background: S.accent, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✨</div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>AI Listing Generator</p>
+                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Fill in simple details — AI writes the listing</p>
                   </div>
-                ))}
-
-                <div>
-                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STATE *</label>
-                  <select name="state" value={aiInputs.state} onChange={handleAiInput}
-                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                    <option value="">Select state</option>
-                    {states.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>CATEGORY *</label>
-                  <select name="category" value={aiInputs.category} onChange={handleAiInput}
-                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                    <option value="">Select category</option>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {[
+                    ['artisanName', 'ARTISAN NAME *',               'e.g. Rekha Bora'],
+                    ['village',     'VILLAGE / DISTRICT *',         'e.g. Sualkuchi'],
+                    ['experience',  'YEARS OF EXPERIENCE *',        'e.g. 25 years'],
+                    ['productName', 'PRODUCT NAME *',               'e.g. Muga Silk Saree'],
+                    ['material',    'MATERIAL USED *',              'e.g. Pure Muga silk'],
+                    ['technique',   'SPECIAL TECHNIQUE (optional)', 'e.g. Hand-loomed'],
+                  ].map(([name, label, placeholder]) => (
+                    <div key={name}>
+                      <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>{label}</label>
+                      <input type="text" name={name} value={aiInputs[name]} onChange={handleAiInput}
+                        placeholder={placeholder}
+                        style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                    </div>
+                  ))}
 
-                <div>
-                  <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>TIME TO MAKE *</label>
-                  <select name="timeTomake" value={aiInputs.timeTomake} onChange={handleAiInput}
-                    style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
-                    <option value="">Select time</option>
-                    {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>STATE *</label>
+                    <select name="state" value={aiInputs.state} onChange={handleAiInput}
+                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                      <option value="">Select state</option>
+                      {states.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
 
-                <button onClick={handleGenerateListing} disabled={aiLoading}
-                  style={{ background: aiLoading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: aiLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '4px' }}>
-                  {aiLoading ? '✨ GENERATING...' : '✨ GENERATE LISTING WITH AI'}
-                </button>
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>CATEGORY *</label>
+                    <select name="category" value={aiInputs.category} onChange={handleAiInput}
+                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                      <option value="">Select category</option>
+                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>TIME TO MAKE *</label>
+                    <select name="timeTomake" value={aiInputs.timeTomake} onChange={handleAiInput}
+                      style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                      <option value="">Select time</option>
+                      {timeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+
+                  <button onClick={handleGenerateListing} disabled={aiLoading}
+                    style={{ background: aiLoading ? '#888' : S.accent, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: aiLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginTop: '4px' }}>
+                    {aiLoading ? '✨ GENERATING...' : '✨ GENERATE LISTING WITH AI'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -411,6 +541,23 @@ export default function SellerDashboard() {
                       style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
                   </div>
                 </div>
+
+                {/* Image summary */}
+                {uploadedImages.length > 0 && (
+                  <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '10px 14px', borderRadius: '3px' }}>
+                    <p style={{ fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>
+                      📸 {uploadedImages.length} photo{uploadedImages.length > 1 ? 's' : ''} uploaded and AI enhanced ✓
+                    </p>
+                  </div>
+                )}
+
+                {uploadedImages.length === 0 && (
+                  <div style={{ background: '#fef5e7', border: '1px solid #f59e0b', padding: '10px 14px', borderRadius: '3px' }}>
+                    <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans }}>
+                      💡 Add photos on the left for better sales. Products with photos sell 3x more.
+                    </p>
+                  </div>
+                )}
 
                 <button onClick={handleSaveProduct} disabled={saveLoading}
                   style={{ background: saveLoading ? '#888' : S.dark, color: '#fff', padding: '13px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: saveLoading ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
