@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Logo from '../../components/Logo'
-import { useCart } from '../../context/CartContext'
-import { useAuth } from '../../context/AuthContext'
+import { useCart }     from '../../context/CartContext'
+import { useAuth }     from '../../context/AuthContext'
+import { useWishlist } from '../../context/WishlistContext'
+import { useCurrency } from '../../context/CurrencyContext'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -12,14 +14,14 @@ const S = {
 }
 
 const allProducts = [
-  { id:1,  name:'Muga Silk Saree',       price:4500, orig:5200, seller:'Rekha Bora',     state:'Assam',             cat:'Silk & Textiles', bg:'#f9f0e8', emoji:'🧵', time:'4 days', exp:'35 years', village:'Sualkuchi',   desc:'The Muga silk saree is one of the rarest and most precious textiles in the world, found only in Assam. Woven from the golden threads of the Antheraea assamensis silkworm, each saree takes weeks of careful work. Rekha Bora has been weaving Muga silk for over 35 years in the weaving village of Sualkuchi, passing down techniques learned from her mother.', material:'Pure Muga silk', wash:'Dry clean only', weight:'650g' },
-  { id:2,  name:'Bamboo Pendant Lamp',   price:850,  orig:null, seller:'Mohan Das',      state:'Tripura',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'2 days', exp:'20 years', village:'Agartala',    desc:'Hand-crafted from locally sourced Tripura bamboo, this pendant lamp casts beautiful patterned shadows when lit. Each lamp is unique — the weave pattern varies slightly with every piece. Mohan Das has been crafting bamboo products for over 20 years, exporting to customers across India.', material:'Natural bamboo', wash:'Wipe with dry cloth', weight:'320g' },
-  { id:3,  name:'Xorai Brass Tray',      price:1200, orig:null, seller:'Dipali Gogoi',   state:'Assam',             cat:'Brass & Metal',   bg:'#fdf7e3', emoji:'🏺', time:'3 days', exp:'28 years', village:'Sarthebari',  desc:'The Xorai is a traditional Assamese ceremonial tray used in religious offerings and cultural ceremonies. Cast in pure brass using the centuries-old cire perdue (lost-wax) technique, each Xorai from Sarthebari — the brass town of Assam — is a piece of living heritage. Dipali Gogoi represents the third generation of brass craftsmen in her family.', material:'Pure brass', wash:'Polish with brass cleaner', weight:'480g' },
-  { id:4,  name:'Orthodox Gold Tea',     price:450,  orig:550,  seller:'Rahim Ali',      state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day',  exp:'15 years', village:'Jorhat',      desc:'Hand-rolled whole-leaf orthodox tea from the Jorhat gardens of upper Assam. Assam orthodox tea is known worldwide for its rich malty flavor and natural golden liquor. Rahim Ali works directly with small tea growers to bring you garden-fresh tea without any blending or artificial processing.', material:'100% Assam tea leaves', wash:'Brew at 95°C for 3-4 mins', weight:'200g' },
-  { id:5,  name:'Naga Warrior Shawl',    price:2800, orig:null, seller:'Leno Angami',    state:'Nagaland',          cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'6 days', exp:'40 years', village:'Kohima',      desc:'The traditional Naga warrior shawl is a symbol of status and achievement in Angami Naga culture. Each geometric pattern carries a specific meaning — the bold red and black stripes represent courage. Leno Angami is a master weaver from Kohima who has spent 40 years preserving these ancient weaving traditions.', material:'Hand-spun cotton', wash:'Hand wash cold', weight:'420g' },
-  { id:6,  name:'Longpi Pottery Bowl',   price:650,  orig:null, seller:'Sana Devi',      state:'Manipur',           cat:'Pottery',         bg:'#fdf0e8', emoji:'🏛️', time:'2 days', exp:'22 years', village:'Longpi Gram', desc:'Longpi pottery from Manipur is made without a wheel — entirely by hand using a unique technique involving serpentinite stone and clay. The distinctive dark grey-black finish is natural, achieved through burnishing. No two pieces are identical. Sana Devi is one of the few remaining potters keeping this UNESCO-recognized craft alive.', material:'Serpentinite & clay', wash:'Hand wash only', weight:'380g' },
-  { id:7,  name:'Cane Woven Basket',     price:380,  orig:null, seller:'Biren Singh',    state:'Manipur',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'1 day',  exp:'18 years', village:'Imphal',      desc:'Handwoven from locally harvested cane, this basket is both beautiful and functional. The intricate weave pattern is a traditional Meitei design passed down through generations of Manipuri craftsmen. Perfect for storage, gifting, or home decoration.', material:'Natural cane', wash:'Wipe with damp cloth', weight:'280g' },
-  { id:8,  name:'Tribal Silver Ring',    price:920,  orig:1100, seller:'Pemba Sherpa',   state:'Sikkim',            cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'3 days', exp:'25 years', village:'Gangtok',     desc:'Hand-forged from 92.5% sterling silver by Pemba Sherpa in Gangtok, Sikkim. The tribal motifs etched into the band are inspired by ancient Lepcha tribal symbols representing protection and good fortune. Each ring is made to order and adjusted to fit.', material:'Sterling silver 92.5%', wash:'Polish with silver cloth', weight:'12g' },
+  { id:1,  name:'Muga Silk Saree',       price:4500, orig:5200, seller:'Rekha Bora',     state:'Assam',             cat:'Silk & Textiles', bg:'#f9f0e8', emoji:'🧵', time:'4 days', exp:'35 years', village:'Sualkuchi',   desc:'The Muga silk saree is one of the rarest and most precious textiles in the world, found only in Assam. Woven from the golden threads of the Antheraea assamensis silkworm, each saree takes weeks of careful work. Rekha Bora has been weaving Muga silk for over 35 years in the weaving village of Sualkuchi, passing down techniques learned from her mother.', material:'Pure Muga silk', wash:'Dry clean only', weight:'650g', stock:2  },
+  { id:2,  name:'Bamboo Pendant Lamp',   price:850,  orig:null, seller:'Mohan Das',      state:'Tripura',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'2 days', exp:'20 years', village:'Agartala',    desc:'Hand-crafted from locally sourced Tripura bamboo, this pendant lamp casts beautiful patterned shadows when lit. Each lamp is unique — the weave pattern varies slightly with every piece. Mohan Das has been crafting bamboo products for over 20 years, exporting to customers across India.', material:'Natural bamboo', wash:'Wipe with dry cloth', weight:'320g', stock:12 },
+  { id:3,  name:'Xorai Brass Tray',      price:1200, orig:null, seller:'Dipali Gogoi',   state:'Assam',             cat:'Brass & Metal',   bg:'#fdf7e3', emoji:'🏺', time:'3 days', exp:'28 years', village:'Sarthebari',  desc:'The Xorai is a traditional Assamese ceremonial tray used in religious offerings and cultural ceremonies. Cast in pure brass using the centuries-old cire perdue (lost-wax) technique, each Xorai from Sarthebari is a piece of living heritage. Dipali Gogoi represents the third generation of brass craftsmen in her family.', material:'Pure brass', wash:'Polish with brass cleaner', weight:'480g', stock:3  },
+  { id:4,  name:'Orthodox Gold Tea',     price:450,  orig:550,  seller:'Rahim Ali',      state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day',  exp:'15 years', village:'Jorhat',      desc:'Hand-rolled whole-leaf orthodox tea from the Jorhat gardens of upper Assam. Assam orthodox tea is known worldwide for its rich malty flavor and natural golden liquor. Rahim Ali works directly with small tea growers to bring you garden-fresh tea without any blending or artificial processing.', material:'100% Assam tea leaves', wash:'Brew at 95°C for 3-4 mins', weight:'200g', stock:20 },
+  { id:5,  name:'Naga Warrior Shawl',    price:2800, orig:null, seller:'Leno Angami',    state:'Nagaland',          cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'6 days', exp:'40 years', village:'Kohima',      desc:'The traditional Naga warrior shawl is a symbol of status and achievement in Angami Naga culture. Each geometric pattern carries a specific meaning — the bold red and black stripes represent courage. Leno Angami is a master weaver from Kohima who has spent 40 years preserving these ancient weaving traditions.', material:'Hand-spun cotton', wash:'Hand wash cold', weight:'420g', stock:7  },
+  { id:6,  name:'Longpi Pottery Bowl',   price:650,  orig:null, seller:'Sana Devi',      state:'Manipur',           cat:'Pottery',         bg:'#fdf0e8', emoji:'🏛️', time:'2 days', exp:'22 years', village:'Longpi Gram', desc:'Longpi pottery from Manipur is made without a wheel — entirely by hand using a unique technique involving serpentinite stone and clay. The distinctive dark grey-black finish is natural, achieved through burnishing. No two pieces are identical. Sana Devi is one of the few remaining potters keeping this UNESCO-recognized craft alive.', material:'Serpentinite & clay', wash:'Hand wash only', weight:'380g', stock:1  },
+  { id:7,  name:'Cane Woven Basket',     price:380,  orig:null, seller:'Biren Singh',    state:'Manipur',           cat:'Bamboo Crafts',   bg:'#edf5ee', emoji:'🎋', time:'1 day',  exp:'18 years', village:'Imphal',      desc:'Handwoven from locally harvested cane, this basket is both beautiful and functional. The intricate weave pattern is a traditional Meitei design passed down through generations of Manipuri craftsmen. Perfect for storage, gifting, or home decoration.', material:'Natural cane', wash:'Wipe with damp cloth', weight:'280g', stock:8  },
+  { id:8,  name:'Tribal Silver Ring',    price:920,  orig:1100, seller:'Pemba Sherpa',   state:'Sikkim',            cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'3 days', exp:'25 years', village:'Gangtok',     desc:'Hand-forged from 92.5% sterling silver by Pemba Sherpa in Gangtok, Sikkim. The tribal motifs etched into the band are inspired by ancient Lepcha tribal symbols representing protection and good fortune. Each ring is made to order and adjusted to fit.', material:'Sterling silver 92.5%', wash:'Polish with silver cloth', weight:'12g', stock:3  },
 ]
 
 const reviews = [
@@ -28,7 +30,22 @@ const reviews = [
   { name:'Sunita Bora',  city:'Mumbai',    rating:4, text:'The tea is incredible. Best Assam tea I have had outside Assam itself. Fast shipping too.' },
 ]
 
+function CurrencyToggle() {
+  const { currency, setCurrency } = useCurrency()
+  return (
+    <div style={{ display: 'flex', gap: '2px', background: '#f0e8e4', borderRadius: '4px', padding: '3px' }}>
+      {['INR','USD','GBP','EUR'].map(c => (
+        <button key={c} onClick={() => setCurrency(c)}
+          style={{ padding: '3px 7px', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
+          {c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'GBP' ? '£' : '€'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function NavBar({ navigate, user, role, signOut, totalItems }) {
+  const { wishlist } = useWishlist()
   return (
     <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
       <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
@@ -38,41 +55,33 @@ function NavBar({ navigate, user, role, signOut, totalItems }) {
             style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <span onClick={() => navigate('/cart')}
-          style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <CurrencyToggle />
+        <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+          🤍
+          {wishlist.length > 0 && (
+            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{wishlist.length}</span>
+          )}
+        </span>
+        <span onClick={() => navigate('/cart')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
           🛒
           {totalItems > 0 && (
-            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
-              {totalItems}
-            </span>
+            <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{totalItems}</span>
           )}
         </span>
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email.split('@')[0]}</span>
             {role === 'seller' && (
-              <span onClick={() => navigate('/seller/dashboard')}
-                style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                MY DASHBOARD
-              </span>
+              <span onClick={() => navigate('/seller/dashboard')} style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>MY DASHBOARD</span>
             )}
             {user?.email === 'bikidutta319@gmail.com' && (
-              <span onClick={() => navigate('/admin')}
-                style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                ADMIN ⚙️
-              </span>
+              <span onClick={() => navigate('/admin')} style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>ADMIN ⚙️</span>
             )}
-            <button onClick={signOut}
-              style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
-              SIGN OUT
-            </button>
+            <button onClick={signOut} style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>SIGN OUT</button>
           </div>
         ) : (
-          <button onClick={() => navigate('/login')}
-            style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-            SIGN IN
-          </button>
+          <button onClick={() => navigate('/login')} style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>SIGN IN</button>
         )}
       </div>
     </nav>
@@ -83,11 +92,26 @@ export default function ProductDetail() {
   const { id }                    = useParams()
   const navigate                  = useNavigate()
   const { addToCart, totalItems } = useCart()
-  const { user, role, signOut }    = useAuth()
+  const { user, role, signOut }   = useAuth()
+  const { toggleWishlist, isWishlisted } = useWishlist()
+  const { formatPrice }           = useCurrency()
   const product                   = allProducts.find(p => p.id === Number(id)) || allProducts[0]
   const [qty,   setQty]           = useState(1)
   const [added, setAdded]         = useState(false)
+  const [recentlyViewed, setRecentlyViewed] = useState([])
   const related                   = allProducts.filter(p => p.id !== product.id).slice(0, 4)
+  const wishlisted                = isWishlisted(product.id)
+
+  // Track recently viewed
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('bihaan_viewed') || '[]')
+      const filtered = stored.filter(p => p.id !== product.id)
+      const updated = [product, ...filtered].slice(0, 6)
+      localStorage.setItem('bihaan_viewed', JSON.stringify(updated))
+      setRecentlyViewed(filtered.slice(0, 4))
+    } catch {}
+  }, [product.id])
 
   function handleAddToCart() {
     addToCart(product, qty)
@@ -116,8 +140,14 @@ export default function ProductDetail() {
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '48px 40px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'start' }}>
         <div>
-          <div style={{ background: product.bg, borderRadius: '4px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
+          <div style={{ background: product.bg, borderRadius: '4px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', position: 'relative' }}>
             <span style={{ fontSize: '120px', opacity: .6 }}>{product.emoji}</span>
+            {/* Only X left badge */}
+            {product.stock <= 3 && (
+              <div style={{ position: 'absolute', top: '12px', left: '12px', background: '#b91c1c', color: '#fff', fontSize: '10px', letterSpacing: '.08em', padding: '4px 10px', fontFamily: S.sans }}>
+                ONLY {product.stock} LEFT
+              </div>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
             {[1,2,3,4].map(i => (
@@ -147,16 +177,25 @@ export default function ProductDetail() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', paddingBottom: '24px', borderBottom: `1px solid ${S.border}` }}>
-            <span style={{ fontFamily: S.serif, fontSize: '2rem', color: S.dark, fontWeight: 400 }}>₹{product.price.toLocaleString()}</span>
+            <span style={{ fontFamily: S.serif, fontSize: '2rem', color: S.dark, fontWeight: 400 }}>{formatPrice(product.price)}</span>
             {product.orig && (
               <>
-                <span style={{ fontSize: '16px', color: '#b0a498', textDecoration: 'line-through', fontFamily: S.sans }}>₹{product.orig.toLocaleString()}</span>
+                <span style={{ fontSize: '16px', color: '#b0a498', textDecoration: 'line-through', fontFamily: S.sans }}>{formatPrice(product.orig)}</span>
                 <span style={{ background: S.accent, color: '#fff', fontSize: '10px', padding: '3px 8px', letterSpacing: '.08em', fontFamily: S.sans }}>
                   {Math.round((1 - product.price / product.orig) * 100)}% OFF
                 </span>
               </>
             )}
           </div>
+
+          {/* Stock urgency */}
+          {product.stock <= 3 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px', marginBottom: '16px' }}>
+              <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>
+                🔥 Only {product.stock} left — order soon before it sells out
+              </p>
+            </div>
+          )}
 
           <p style={{ fontSize: '14px', color: S.muted, lineHeight: 1.85, marginBottom: '28px', fontFamily: S.sans }}>{product.desc}</p>
 
@@ -179,11 +218,16 @@ export default function ProductDetail() {
               style={{ flex: 1, background: added ? '#2d6a4f' : S.dark, color: '#fff', padding: '12px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', transition: 'background .3s', fontFamily: S.sans }}>
               {added ? '✓ ADDED TO CART' : 'ADD TO CART'}
             </button>
+            {/* Wishlist button */}
+            <button onClick={() => toggleWishlist(product)}
+              style={{ padding: '12px 14px', background: wishlisted ? '#fef2f2' : S.white, border: `1px solid ${wishlisted ? '#fecaca' : S.border}`, cursor: 'pointer', fontSize: '18px', borderRadius: '3px', transition: 'all .2s' }}>
+              {wishlisted ? '❤️' : '🤍'}
+            </button>
           </div>
 
           <button onClick={() => { addToCart(product, qty); navigate('/cart') }}
             style={{ width: '100%', background: S.accent, color: '#fff', padding: '13px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginBottom: '24px' }}>
-            BUY NOW — ₹{(product.price * qty).toLocaleString()}
+            BUY NOW — {formatPrice(product.price * qty)}
           </button>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
@@ -197,6 +241,7 @@ export default function ProductDetail() {
         </div>
       </div>
 
+      {/* Artisan */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
         <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '36px 40px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '32px', alignItems: 'center' }}>
           <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: product.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', flexShrink: 0 }}>
@@ -213,8 +258,9 @@ export default function ProductDetail() {
         </div>
       </div>
 
+      {/* Reviews */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
-        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>Customer reviews</h2>
+        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>Customer reviews</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
           {reviews.map((r, i) => (
             <div key={i} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '20px' }}>
@@ -228,20 +274,50 @@ export default function ProductDetail() {
         </div>
       </div>
 
+      {/* Recently Viewed */}
+      {recentlyViewed.length > 0 && (
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
+          <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>Recently viewed</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            {recentlyViewed.map(p => (
+              <div key={p.id} onClick={() => navigate(`/product/${p.id}`)} style={{ cursor: 'pointer' }} className="group">
+                <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  <span style={{ fontSize: '48px', opacity: .6 }} className="group-hover:scale-105 transition-transform">{p.emoji}</span>
+                  {p.stock <= 3 && (
+                    <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', padding: '3px 7px', fontFamily: S.sans }}>
+                      ONLY {p.stock} LEFT
+                    </div>
+                  )}
+                </div>
+                <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{p.state?.toUpperCase()}</p>
+                <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '6px' }}>{p.name}</p>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(p.price)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Related */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 60px' }}>
-        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px', letterSpacing: '-.01em' }}>You may also like</h2>
+        <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>You may also like</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
           {related.map(p => (
             <div key={p.id} onClick={() => navigate(`/product/${p.id}`)} style={{ cursor: 'pointer' }} className="group">
               <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '12px', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <span style={{ fontSize: '48px', opacity: .6 }} className="group-hover:scale-105 transition-transform">{p.emoji}</span>
+                {p.stock <= 3 && (
+                  <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', padding: '3px 7px', fontFamily: S.sans }}>
+                    ONLY {p.stock} LEFT
+                  </div>
+                )}
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px', background: 'linear-gradient(0deg,rgba(26,18,8,.65) 0%,transparent 100%)', display: 'flex', justifyContent: 'center' }} className="opacity-0 group-hover:opacity-100 transition-opacity">
                   <span style={{ color: '#fff', fontSize: '10px', letterSpacing: '.15em', fontFamily: S.sans }}>QUICK VIEW</span>
                 </div>
               </div>
               <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{p.state.toUpperCase()}</p>
               <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '6px' }}>{p.name}</p>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>₹{p.price.toLocaleString()}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(p.price)}</span>
             </div>
           ))}
         </div>
@@ -256,7 +332,6 @@ export default function ProductDetail() {
         </div>
         <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>© 2026 BIHAAN · NORTHEAST INDIA</p>
       </footer>
-
     </div>
   )
 }
