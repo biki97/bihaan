@@ -153,26 +153,49 @@ export default function Products() {
 
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
-          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>CATEGORIES</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
-            {categories.map(c => (
-              <button key={c} onClick={() => setCat(c)}
-                style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: cat === c ? `2px solid ${S.accent}` : '2px solid transparent', background: cat === c ? '#fef5f3' : 'transparent', color: cat === c ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
-                {c}
-              </button>
-            ))}
-          </div>
 
+          {/* States accordion */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>BY STATE</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
-            {states.map(s => (
-              <button key={s} onClick={() => setState(s)}
-                style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: state === s ? `2px solid ${S.accent}` : '2px solid transparent', background: state === s ? '#fef5f3' : 'transparent', color: state === s ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
-                {s}
-              </button>
+
+            {/* All States */}
+            <button onClick={() => { setState('All'); setCat('All Products') }}
+              style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: state === 'All' ? `2px solid ${S.accent}` : '2px solid transparent', background: state === 'All' ? '#fef5f3' : 'transparent', color: state === 'All' ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
+              All States
+            </button>
+
+            {/* Each state with accordion */}
+            {states.slice(1).map(s => (
+              <div key={s}>
+                <button
+                  onClick={() => { setState(state === s ? 'All' : s); setCat('All Products') }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: state === s ? `2px solid ${S.accent}` : '2px solid transparent', background: state === s ? '#fef5f3' : 'transparent', color: state === s ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
+                  <span>{s}</span>
+                  <span style={{ fontSize: '10px', color: S.muted }}>{state === s ? '▲' : '▼'}</span>
+                </button>
+
+                {/* Categories expand under state */}
+                {state === s && (
+                  <div style={{ background: '#fef9f7', borderLeft: `2px solid ${S.accent}`, marginBottom: '4px' }}>
+                    {[
+                      'All Categories',
+                      'Silk & Textiles', 'Handloom', 'Bamboo Crafts',
+                      'Brass & Metal', 'Tea & Spices', 'Heritage Crafts',
+                      'Pottery', 'Jewellery', 'Other'
+                    ].map((catName, i) => (
+                      <button key={catName}
+                        onClick={() => setCat(catName === 'All Categories' ? 'All Products' : catName)}
+                        style={{ display: 'block', width: '100%', padding: '6px 10px 6px 18px', fontSize: '12px', cursor: 'pointer', border: 'none', background: cat === (catName === 'All Categories' ? 'All Products' : catName) ? '#fef5f3' : 'transparent', color: cat === (catName === 'All Categories' ? 'All Products' : catName) ? S.accent : S.muted, textAlign: 'left', fontFamily: S.sans }}>
+                        {i === 0 ? `All in ${s}` : catName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
 
+          {/* Price range */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>MAX PRICE</p>
           <input type="range" min="300" max="10000" step="100" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
             style={{ width: '100%', accentColor: S.accent, marginBottom: '6px' }} />
