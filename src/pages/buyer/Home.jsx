@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../../components/Logo'
 import { useAuth } from '../../context/AuthContext'
@@ -17,7 +18,7 @@ const categories = [
   { name: 'Bamboo Crafts',   count: 35  },
   { name: 'Brass & Metal',   count: 29  },
   { name: 'Tea & Spices',    count: 41  },
-  { name: 'Tribal Crafts',   count: 33  },
+  { name: 'Heritage Crafts',   count: 33  },
   { name: 'Pottery',         count: 18  },
   { name: 'Jewellery',       count: 27  },
 ]
@@ -34,7 +35,7 @@ const featured = [
   { id:4,  name:'Orthodox Gold Tea',    price:450,  orig:550,  seller:'Rahim Ali',    state:'Assam',             cat:'Tea & Spices',    bg:'#fef5e7', emoji:'🍵', time:'1 day'  },
   { id:5,  name:'Naga Warrior Shawl',   price:2800, orig:null, seller:'Leno Angami',  state:'Nagaland',          cat:'Handloom',        bg:'#f3f0fb', emoji:'🪡', time:'6 days' },
   { id:6,  name:'Longpi Pottery Bowl',  price:650,  orig:null, seller:'Sana Devi',    state:'Manipur',           cat:'Pottery',         bg:'#fdf0e8', emoji:'🏛️', time:'2 days' },
-  { id:7,  name:'Arunachal Wood Mask',  price:2200, orig:null, seller:'Tashi Dorje',  state:'Arunachal Pradesh', cat:'Tribal Crafts',   bg:'#eef3f8', emoji:'🎨', time:'7 days' },
+  { id:7,  name:'Arunachal Wood Mask',  price:2200, orig:null, seller:'Tashi Dorje',  state:'Arunachal Pradesh', cat:'Heritage Crafts',   bg:'#eef3f8', emoji:'🎨', time:'7 days' },
   { id:8,  name:'Tribal Silver Ring',   price:920,  orig:1100, seller:'Pemba Sherpa', state:'Sikkim',            cat:'Jewellery',       bg:'#fdf0f5', emoji:'💍', time:'3 days' },
 ]
 
@@ -143,6 +144,7 @@ function ProductCard({ product, navigate }) {
 
 export default function Home() {
   const navigate = useNavigate()
+  const [selectedState, setSelectedState] = useState(null)
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
@@ -211,10 +213,10 @@ export default function Home() {
 
       {/* States strip */}
       <div style={{ background: S.accent, padding: '11px 40px', display: 'flex', gap: '28px', justifyContent: 'center', overflowX: 'auto' }}>
-        {states.map(s => (
-          <span key={s} onClick={() => navigate(`/products?state=${s}`)}
-            style={{ color: '#fff', fontSize: '11px', letterSpacing: '.12em', whiteSpace: 'nowrap', cursor: 'pointer', opacity: .85, fontFamily: S.sans }}
-            className="hover:opacity-100 transition-opacity">
+        {['All', ...states].map(s => (
+          <span key={s}
+            onClick={() => setSelectedState(s === 'All' ? null : s)}
+            style={{ color: '#fff', fontSize: '11px', letterSpacing: '.12em', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: S.sans, opacity: (selectedState === s || (s === 'All' && !selectedState)) ? 1 : .65, borderBottom: (selectedState === s || (s === 'All' && !selectedState)) ? '1px solid #fff' : 'none', paddingBottom: '2px' }}>
             {s.toUpperCase()}
           </span>
         ))}
@@ -246,14 +248,27 @@ export default function Home() {
 
         <div style={{ paddingLeft: '36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>8 featured products</p>
-            <button onClick={() => navigate('/products')}
+            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
+              {selectedState ? `Products from ${selectedState}` : 'Featured products'}
+            </p>
+            <button onClick={() => navigate(selectedState ? `/products?state=${selectedState}` : '/products')}
               style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
               VIEW ALL →
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
-            {featured.map(p => <ProductCard key={p.id} product={p} navigate={navigate} />)}
+            {(selectedState ? featured.filter(p => p.state === selectedState) : featured).length === 0 ? (
+              <div style={{ gridColumn: 'span 4', textAlign: 'center', padding: '40px 0' }}>
+                <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '12px' }}>No featured products from {selectedState} yet.</p>
+                <button onClick={() => navigate(`/products?state=${selectedState}`)}
+                  style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '8px 20px', cursor: 'pointer', fontFamily: S.sans }}>
+                  BROWSE ALL {selectedState.toUpperCase()} PRODUCTS →
+                </button>
+              </div>
+            ) : (
+              (selectedState ? featured.filter(p => p.state === selectedState) : featured)
+                .map(p => <ProductCard key={p.id} product={p} navigate={navigate} />)
+            )}
           </div>
         </div>
       </div>

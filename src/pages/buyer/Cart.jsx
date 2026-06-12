@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../../context/CartContext'
+import { useAuth } from '../../context/AuthContext'
 import Logo from '../../components/Logo'
 
 const S = {
@@ -12,6 +13,7 @@ const S = {
 export default function Cart() {
   const navigate = useNavigate()
   const { cart, removeFromCart, updateQty, totalItems, totalAmount } = useCart()
+  const { user, role, signOut } = useAuth()
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
@@ -35,10 +37,47 @@ export default function Cart() {
             </span>
           ))}
         </div>
-        <button onClick={() => navigate('/login')}
-          style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-          SIGN IN
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Cart icon with count */}
+          <span onClick={() => navigate('/cart')}
+            style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+            🛒
+            {totalItems > 0 && (
+              <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
+                {totalItems}
+              </span>
+            )}
+          </span>
+          {/* Auth */}
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
+                {user.email.split('@')[0]}
+              </span>
+              {role === 'seller' && (
+                <span onClick={() => navigate('/seller/dashboard')}
+                  style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
+                  MY DASHBOARD
+                </span>
+              )}
+              {user?.email === 'bikidutta319@gmail.com' && (
+                <span onClick={() => navigate('/admin')}
+                  style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
+                  ADMIN ⚙️
+                </span>
+              )}
+              <button onClick={signOut}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
+                SIGN OUT
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => navigate('/login')}
+              style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+              SIGN IN
+            </button>
+          )}
+        </div>
       </nav>
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px' }}>
@@ -72,18 +111,14 @@ export default function Cart() {
 
             {/* Cart items */}
             <div>
-              {/* Header row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '16px', padding: '0 0 12px', borderBottom: `1px solid ${S.border}`, marginBottom: '0' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '16px', padding: '0 0 12px', borderBottom: `1px solid ${S.border}` }}>
                 {['Product', 'Price', 'Quantity', 'Total'].map(h => (
                   <p key={h} style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, fontFamily: S.sans, textAlign: h !== 'Product' ? 'center' : 'left' }}>{h}</p>
                 ))}
               </div>
 
-              {/* Items */}
               {cart.map(item => (
                 <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '16px', padding: '20px 0', borderBottom: `1px solid ${S.border}`, alignItems: 'center' }}>
-
-                  {/* Product info */}
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                     <div style={{ width: '72px', height: '72px', borderRadius: '3px', background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <span style={{ fontSize: '28px', opacity: .6 }}>{item.emoji}</span>
@@ -99,35 +134,26 @@ export default function Cart() {
                     </div>
                   </div>
 
-                  {/* Price */}
                   <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans, textAlign: 'center' }}>
                     ₹{item.price.toLocaleString()}
                   </p>
 
-                  {/* Quantity */}
                   <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${S.border}` }}>
                     <button onClick={() => updateQty(item.id, item.qty - 1)}
-                      style={{ padding: '6px 10px', background: 'transparent', border: 'none', fontSize: '14px', cursor: 'pointer', color: S.dark }}>
-                      −
-                    </button>
+                      style={{ padding: '6px 10px', background: 'transparent', border: 'none', fontSize: '14px', cursor: 'pointer', color: S.dark }}>−</button>
                     <span style={{ padding: '6px 12px', fontSize: '13px', color: S.dark, fontFamily: S.sans, minWidth: '32px', textAlign: 'center' }}>
                       {item.qty}
                     </span>
                     <button onClick={() => updateQty(item.id, item.qty + 1)}
-                      style={{ padding: '6px 10px', background: 'transparent', border: 'none', fontSize: '14px', cursor: 'pointer', color: S.dark }}>
-                      +
-                    </button>
+                      style={{ padding: '6px 10px', background: 'transparent', border: 'none', fontSize: '14px', cursor: 'pointer', color: S.dark }}>+</button>
                   </div>
 
-                  {/* Total */}
                   <p style={{ fontSize: '14px', fontWeight: 500, color: S.dark, fontFamily: S.sans, textAlign: 'center' }}>
                     ₹{(item.price * item.qty).toLocaleString()}
                   </p>
-
                 </div>
               ))}
 
-              {/* Continue shopping */}
               <button onClick={() => navigate('/products')}
                 style={{ marginTop: '20px', fontSize: '11px', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.1em' }}>
                 ← CONTINUE SHOPPING
@@ -175,7 +201,6 @@ export default function Cart() {
                 CONTINUE SHOPPING
               </button>
 
-              {/* Trust */}
               <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${S.border}` }}>
                 {['🔒 Secure checkout', '✓ Verified artisans', '⟳ Easy returns'].map(t => (
                   <p key={t} style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginBottom: '6px' }}>{t}</p>

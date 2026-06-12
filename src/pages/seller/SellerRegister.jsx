@@ -13,7 +13,7 @@ const S = {
 
 const categories = [
   'Silk & Textiles', 'Handloom', 'Bamboo Crafts',
-  'Brass & Metal', 'Tea & Spices', 'Tribal Crafts',
+  'Brass & Metal', 'Tea & Spices', 'Heritage Crafts',
   'Pottery', 'Jewellery', 'Other'
 ]
 
