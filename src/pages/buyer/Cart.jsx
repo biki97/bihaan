@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { useCart } from '../../context/CartContext'
-import { useAuth } from '../../context/AuthContext'
+import { useCart }     from '../../context/CartContext'
+import { useAuth }     from '../../context/AuthContext'
+import { useWishlist } from '../../context/WishlistContext'
+import { useCurrency } from '../../context/CurrencyContext'
 import Logo from '../../components/Logo'
 
 const S = {
@@ -10,10 +12,25 @@ const S = {
   sans: "'Inter', system-ui, sans-serif",
 }
 
+function CurrencyToggle() {
+  const { currency, setCurrency } = useCurrency()
+  return (
+    <div style={{ display: 'flex', gap: '2px', background: '#f0e8e4', borderRadius: '4px', padding: '3px' }}>
+      {['INR','USD','GBP','EUR'].map(c => (
+        <button key={c} onClick={() => setCurrency(c)}
+          style={{ padding: '3px 7px', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
+          {c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'GBP' ? '£' : '€'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Cart() {
   const navigate = useNavigate()
   const { cart, removeFromCart, updateQty, totalItems, totalAmount } = useCart()
-  const { user, role, signOut } = useAuth()
+  const { user, role, signOut }   = useAuth()
+  const { wishlist }               = useWishlist()
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
@@ -38,6 +55,14 @@ export default function Cart() {
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Currency + Wishlist + Cart */}
+          <CurrencyToggle />
+          <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+            🤍
+            {wishlist.length > 0 && (
+              <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{wishlist.length}</span>
+            )}
+          </span>
           {/* Cart icon with count */}
           <span onClick={() => navigate('/cart')}
             style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>

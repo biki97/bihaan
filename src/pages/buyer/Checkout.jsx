@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCart } from '../../context/CartContext'
-import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { useCart }     from '../../context/CartContext'
+import { useAuth }     from '../../context/AuthContext'
+import { useWishlist } from '../../context/WishlistContext'
+import { useCurrency } from '../../context/CurrencyContext'
+import { supabase }    from '../../lib/supabase'
 import Logo from '../../components/Logo'
 
 const S = {
@@ -12,10 +14,25 @@ const S = {
   sans: "'Inter', system-ui, sans-serif",
 }
 
+function CurrencyToggle() {
+  const { currency, setCurrency } = useCurrency()
+  return (
+    <div style={{ display: 'flex', gap: '2px', background: '#f0e8e4', borderRadius: '4px', padding: '3px' }}>
+      {['INR','USD','GBP','EUR'].map(c => (
+        <button key={c} onClick={() => setCurrency(c)}
+          style={{ padding: '3px 7px', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
+          {c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'GBP' ? '£' : '€'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Checkout() {
   const navigate                         = useNavigate()
   const { cart, totalAmount, clearCart } = useCart()
-  const { user }                         = useAuth()
+  const { user, role, signOut }           = useAuth()
+  const { wishlist }                     = useWishlist()
   const [loading, setLoading]            = useState(false)
   const [form,    setForm]               = useState({
     name: '', phone: '', address: '',
@@ -148,13 +165,24 @@ export default function Checkout() {
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
-        <p style={{ fontSize: '12px', letterSpacing: '.15em', color: S.muted, fontFamily: S.sans }}>
-          🔒 SECURE CHECKOUT
-        </p>
-        <button onClick={() => navigate('/cart')}
-          style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-          ← BACK TO CART
-        </button>
+        <p style={{ fontSize: '12px', letterSpacing: '.15em', color: S.muted, fontFamily: S.sans }}>🔒 SECURE CHECKOUT</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <CurrencyToggle />
+          <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
+            🤍
+            {wishlist.length > 0 && <span style={{ position: 'absolute', top: '-8px', right: '-10px', background: S.accent, color: '#fff', fontSize: '9px', width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>{wishlist.length}</span>}
+          </span>
+          {user ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>{user.email?.split('@')[0] || user.phone}</span>
+              {role === 'seller' && <span onClick={() => navigate('/seller/dashboard')} style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>MY DASHBOARD</span>}
+              {user?.email === 'bikidutta319@gmail.com' && <span onClick={() => navigate('/admin')} style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>ADMIN ⚙️</span>}
+              <button onClick={() => navigate('/cart')} style={{ fontSize: '11px', letterSpacing: '.08em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>← CART</button>
+            </div>
+          ) : (
+            <button onClick={() => navigate('/cart')} style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>← BACK TO CART</button>
+          )}
+        </div>
       </nav>
 
       <div style={{ padding: '14px 40px', background: S.white, borderBottom: `1px solid ${S.border}` }}>

@@ -12,6 +12,20 @@ const S = {
   sans: "'Inter', system-ui, sans-serif",
 }
 
+function CurrencyToggle() {
+  const { currency, setCurrency } = useCurrency()
+  return (
+    <div style={{ display: 'flex', gap: '2px', background: '#f0e8e4', borderRadius: '4px', padding: '3px' }}>
+      {['INR','USD','GBP','EUR'].map(c => (
+        <button key={c} onClick={() => setCurrency(c)}
+          style={{ padding: '3px 7px', fontSize: '10px', border: 'none', cursor: 'pointer', fontFamily: S.sans, borderRadius: '3px', background: currency === c ? S.dark : 'transparent', color: currency === c ? '#fff' : S.muted, transition: 'all .15s' }}>
+          {c === 'INR' ? '₹' : c === 'USD' ? '$' : c === 'GBP' ? '£' : '€'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Wishlist() {
   const navigate = useNavigate()
   const { user, role, signOut }            = useAuth()
@@ -34,7 +48,8 @@ export default function Wishlist() {
               style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <CurrencyToggle />
           <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
             ❤️
             {wishlist.length > 0 && (
