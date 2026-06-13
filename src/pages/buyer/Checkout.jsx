@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { useCart }     from '../../context/CartContext'
 import { useAuth }     from '../../context/AuthContext'
@@ -155,13 +156,13 @@ export default function Checkout() {
   }
 
   return (
-    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
+    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         SECURE CHECKOUT · AUTHENTIC NORTHEAST INDIA
       </div>
 
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
@@ -191,7 +192,7 @@ export default function Checkout() {
         </p>
       </div>
 
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '40px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '40px', alignItems: 'start' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '40px', alignItems: 'start' }}>
 
         {/* Delivery form */}
         <div>
@@ -200,7 +201,7 @@ export default function Checkout() {
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
                 <input name="name" value={form.name} onChange={handleChange} placeholder="Your full name"

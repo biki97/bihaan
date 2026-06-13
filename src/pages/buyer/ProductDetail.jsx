@@ -1,3 +1,4 @@
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Logo from '../../components/Logo'
@@ -43,9 +44,9 @@ function CurrencyToggle() {
 function NavBar({ navigate, user, role, signOut, totalItems }) {
   const { wishlist } = useWishlist()
   return (
-    <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+    <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
       <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
-      <div style={{ display: 'flex', gap: '28px' }}>
+      <div style={{ display: isMobile ? 'none' : 'flex', gap: '28px' }}>
         {['Products','Artisans','Our Story','States'].map(item => (
           <span key={item} onClick={() => item === 'Products' && navigate('/products')}
             style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
@@ -162,7 +163,7 @@ export default function ProductDetail() {
   const wishlisted = isWishlisted(product.id)
 
   return (
-    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
+    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA
@@ -180,7 +181,7 @@ export default function ProductDetail() {
         </p>
       </div>
 
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '48px 40px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', alignItems: 'start' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '24px 16px' : '48px 40px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '60px', alignItems: 'start' }}>
 
         {/* Images */}
         <div>
@@ -199,7 +200,7 @@ export default function ProductDetail() {
           </div>
           {/* Thumbnails */}
           {hasImages && product.images.length > 1 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '8px' }}>
               {product.images.map((img, i) => (
                 <div key={i} onClick={() => setSelectedImage(i)}
                   style={{ borderRadius: '3px', aspectRatio: '1', overflow: 'hidden', cursor: 'pointer', border: selectedImage === i ? `2px solid ${S.accent}` : '2px solid transparent' }}>
@@ -209,7 +210,7 @@ export default function ProductDetail() {
             </div>
           )}
           {!hasImages && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '8px' }}>
               {[1,2,3,4].map(i => (
                 <div key={i} style={{ background: catStyle.bg, borderRadius: '3px', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', border: i === 1 ? `2px solid ${S.accent}` : '2px solid transparent' }}>
                   <span style={{ fontSize: '24px', opacity: .5 }}>{catStyle.emoji}</span>
@@ -284,7 +285,7 @@ export default function ProductDetail() {
             BUY NOW — {formatPrice(product.price * qty)}
           </button>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: '12px' }}>
             {[['✓','Verified authentic'],['⟳','Easy returns'],['🔒','Secure payment']].map(([icon, label]) => (
               <div key={label} style={{ textAlign: 'center', padding: '10px', border: `1px solid ${S.border}`, borderRadius: '3px' }}>
                 <p style={{ fontSize: '14px', marginBottom: '3px' }}>{icon}</p>
@@ -298,7 +299,7 @@ export default function ProductDetail() {
       {/* Seller info */}
       {seller && (
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
-          <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '36px 40px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '32px', alignItems: 'center' }}>
+          <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: isMobile ? '24px 16px' : '36px 40px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '32px', alignItems: 'center' }}>
             <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: catStyle.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '36px', flexShrink: 0 }}>
               {catStyle.emoji}
             </div>
@@ -318,7 +319,7 @@ export default function ProductDetail() {
       {recentlyViewed.length > 0 && (
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
           <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>Recently viewed</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
             {recentlyViewed.map(p => {
               const ps = CAT_STYLE[p.category] || CAT_STYLE['Other']
               return (
@@ -343,7 +344,7 @@ export default function ProductDetail() {
       {related.length > 0 && (
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 60px' }}>
           <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>You may also like</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
             {related.map(p => {
               const ps = CAT_STYLE[p.category] || CAT_STYLE['Other']
               return (
@@ -372,7 +373,7 @@ export default function ProductDetail() {
         </div>
       )}
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <div style={{ display: 'flex', gap: '20px' }}>
           {['ABOUT','ARTISANS','SELL','CONTACT'].map(l => (

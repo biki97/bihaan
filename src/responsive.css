@@ -1,0 +1,115 @@
+/* ── Responsive fixes for Bihaan ── */
+
+* {
+    box-sizing: border-box;
+  }
+  
+  body {
+    overflow-x: hidden;
+  }
+  
+  /* ── Mobile grid overrides ── */
+  @media (max-width: 768px) {
+  
+    /* Prevent horizontal overflow */
+    .bihaan-page {
+      overflow-x: hidden;
+      width: 100%;
+    }
+  
+    /* Product grids: 4-col → 2-col */
+    .grid-4 {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 12px !important;
+    }
+  
+    /* Hero and detail: 2-col → 1-col */
+    .grid-2 {
+      grid-template-columns: 1fr !important;
+      gap: 24px !important;
+    }
+  
+    /* Sidebar: hide on mobile */
+    .sidebar {
+      display: none !important;
+    }
+  
+    /* Full width on mobile */
+    .sidebar-content {
+      grid-template-columns: 1fr !important;
+    }
+  
+    /* Padding: 40px → 16px */
+    .page-pad {
+      padding-left: 16px !important;
+      padding-right: 16px !important;
+    }
+  
+    /* Navbar links: hide on mobile */
+    .nav-links {
+      display: none !important;
+    }
+  
+    /* Navbar: reduce gap */
+    .nav-actions {
+      gap: 10px !important;
+    }
+  
+    /* Hide sell link on mobile */
+    .nav-sell {
+      display: none !important;
+    }
+  
+    /* Smaller heading on mobile */
+    .hero-title {
+      font-size: 1.8rem !important;
+    }
+  
+    /* Stats grid: 4-col → 2-col */
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+    }
+  
+    /* Dark banner: 2-col → 1-col */
+    .dark-banner {
+      grid-template-columns: 1fr !important;
+      padding: 32px 20px !important;
+      margin: 0 16px 24px !important;
+    }
+  
+    /* Cart: stack layout */
+    .cart-layout {
+      grid-template-columns: 1fr !important;
+    }
+  
+    /* Checkout: stack layout */
+    .checkout-layout {
+      grid-template-columns: 1fr !important;
+    }
+  
+    /* Product detail: stack */
+    .detail-layout {
+      grid-template-columns: 1fr !important;
+      gap: 24px !important;
+      padding: 24px 16px !important;
+    }
+  
+    /* Form grids */
+    .form-2col {
+      grid-template-columns: 1fr !important;
+    }
+  
+    /* Currency toggle: smaller */
+    .currency-toggle button {
+      padding: 2px 5px !important;
+      font-size: 9px !important;
+    }
+  
+    /* Footer: stack */
+    .footer {
+      flex-direction: column !important;
+      gap: 12px !important;
+      text-align: center !important;
+      padding: 20px 16px !important;
+    }
+  }

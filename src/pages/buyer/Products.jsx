@@ -1,3 +1,4 @@
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useState, useEffect } from 'react'
 import { useAuth }     from '../../context/AuthContext'
 import { useCart }     from '../../context/CartContext'
@@ -93,14 +94,14 @@ export default function Products() {
     )
 
   return (
-    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
+    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA
       </div>
 
       {/* Nav */}
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
         <div style={{ display: 'flex', gap: '28px' }}>
           {['Products','Artisans','Our Story','States'].map(item => (
@@ -149,7 +150,7 @@ export default function Products() {
       </div>
 
       {/* Body */}
-      <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', maxWidth: '1280px', margin: '0 auto', padding: '36px 40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '190px 1fr', maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '24px 16px' : '36px 40px' }}>
 
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
@@ -217,7 +218,7 @@ export default function Products() {
           </div>
 
           {loading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {[1,2,3,4,5,6,7,8].map(i => (
                 <div key={i}>
                   <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px' }} />
@@ -236,7 +237,7 @@ export default function Products() {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {filtered.map(product => {
                 const style = CAT_STYLE[product.category] || CAT_STYLE['Other']
                 const hasImage = product.images && product.images[0]
@@ -288,7 +289,7 @@ export default function Products() {
         </div>
       </div>
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <div style={{ display: 'flex', gap: '20px' }}>
           {['ABOUT','ARTISANS','SELL','CONTACT'].map(l => (

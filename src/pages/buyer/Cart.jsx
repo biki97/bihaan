@@ -1,3 +1,4 @@
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { useCart }     from '../../context/CartContext'
 import { useAuth }     from '../../context/AuthContext'
@@ -27,13 +28,14 @@ function CurrencyToggle() {
 }
 
 export default function Cart() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const isMobile  = useIsMobile()
   const { cart, removeFromCart, updateQty, totalItems, totalAmount } = useCart()
   const { user, role, signOut }   = useAuth()
   const { wishlist }               = useWishlist()
 
   return (
-    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
+    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
 
       {/* Top bar */}
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
@@ -41,7 +43,7 @@ export default function Cart() {
       </div>
 
       {/* Nav */}
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
@@ -105,7 +107,7 @@ export default function Cart() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
@@ -241,7 +243,7 @@ export default function Cart() {
       </div>
 
       {/* Footer */}
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px' }}>
+      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>© 2026 BIHAAN · NORTHEAST INDIA</p>
       </footer>

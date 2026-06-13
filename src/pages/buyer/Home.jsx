@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
@@ -112,11 +113,11 @@ function NavBar({ navigate }) {
   const { wishlist }            = useWishlist()
 
   return (
-    <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+    <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
       <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
         <Logo size={36} showText={true} />
       </div>
-      <div style={{ display: 'flex', gap: '28px' }}>
+      <div style={{ display: isMobile ? 'none' : 'flex', gap: '28px' }}>
         {['Products','Artisans','Our Story','States'].map(item => (
           <span key={item} onClick={() => item === 'Products' && navigate('/products')}
             style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
@@ -158,7 +159,8 @@ function NavBar({ navigate }) {
 }
 
 export default function Home() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const isMobile  = useIsMobile()
   const [products,       setProducts]       = useState([])
   const [loading,        setLoading]        = useState(true)
   const [selectedState,  setSelectedState]  = useState(null)
@@ -189,7 +191,7 @@ export default function Home() {
     : products
 
   return (
-    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh' }}>
+    <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         FREE SHIPPING ON ORDERS ABOVE ₹999 &nbsp;·&nbsp; AUTHENTIC NORTHEAST INDIA &nbsp;·&nbsp; 50+ VERIFIED ARTISANS
@@ -198,7 +200,7 @@ export default function Home() {
       <NavBar navigate={navigate} />
 
       {/* Hero */}
-      <div style={{ background: S.white, padding: '64px 40px 48px', borderBottom: `1px solid ${S.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', alignItems: 'center' }}>
+      <div style={{ background: S.white, padding: '64px 40px 48px', borderBottom: `1px solid ${S.border}`, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '40px', alignItems: 'center' }}>
         <div>
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '18px', fontFamily: S.sans }}>HANDCRAFTED IN NORTHEAST INDIA</p>
           <h1 style={{ fontFamily: S.serif, fontSize: 'clamp(2.4rem,4.5vw,3.4rem)', fontWeight: 400, lineHeight: 1.05, letterSpacing: '-.02em', color: S.dark, marginBottom: '20px' }}>
@@ -220,7 +222,7 @@ export default function Home() {
         </div>
 
         {/* Hero product showcase */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
           {products.slice(0, 3).map((p, i) => {
             const style = CAT_STYLE[p.category] || CAT_STYLE['Other']
             const hasImage = p.images && p.images[0]
@@ -273,7 +275,7 @@ export default function Home() {
       </div>
 
       {/* Main */}
-      <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 0, maxWidth: '1280px', margin: '0 auto', padding: '36px 40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '190px 1fr', gap: 0, maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '24px 16px' : '36px 40px' }}>
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
 
@@ -334,7 +336,7 @@ export default function Home() {
           </div>
 
           {loading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {[1,2,3,4,5,6,7,8].map(i => (
                 <div key={i}>
                   <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px', animation: 'pulse 1.5s infinite' }} />
@@ -358,7 +360,7 @@ export default function Home() {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {displayProducts.map(p => <ProductCard key={p.id} product={p} navigate={navigate} />)}
             </div>
           )}
@@ -370,7 +372,7 @@ export default function Home() {
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 40px' }}>
           <div style={{ borderTop: `1px solid ${S.border}`, paddingTop: '32px' }}>
             <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>Recently viewed</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {recentlyViewed.slice(0, 4).map(p => (
                 <div key={p.id} onClick={() => navigate(`/product/${p.id}`)} style={{ cursor: 'pointer' }} className="group">
                   <div style={{ aspectRatio: '3/4', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px', background: (CAT_STYLE[p.category] || CAT_STYLE['Other']).bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -390,7 +392,7 @@ export default function Home() {
       )}
 
       {/* Dark banner */}
-      <div style={{ background: S.dark, margin: '0 40px 40px', padding: '52px 64px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', alignItems: 'center', borderRadius: '4px' }}>
+      <div style={{ background: S.dark, margin: isMobile ? '0 16px 24px' : '0 40px 40px', padding: isMobile ? '32px 20px' : '52px 64px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '48px', alignItems: 'center', borderRadius: '4px' }}>
         <div>
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.gold, marginBottom: '14px', fontFamily: S.sans }}>THE BIHAAN PROMISE</p>
           <h2 style={{ fontFamily: S.serif, fontSize: '34px', fontWeight: 400, color: '#fff', lineHeight: 1.2, marginBottom: '14px' }}>
@@ -400,7 +402,7 @@ export default function Home() {
             Behind every item on Bihaan is a real person — an artisan who has spent decades mastering their craft.
           </p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '20px', textAlign: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: '20px', textAlign: 'center' }}>
           {[['240+','PRODUCTS'],['8','STATES'],['50+','ARTISANS']].map(([num, label]) => (
             <div key={label}>
               <p style={{ fontFamily: S.serif, fontSize: '34px', color: S.gold, fontWeight: 400, marginBottom: '4px' }}>{num}</p>
@@ -410,7 +412,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <div style={{ display: 'flex', gap: '20px' }}>
           {['ABOUT','ARTISANS','SELL','CONTACT'].map(l => (

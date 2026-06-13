@@ -1,3 +1,4 @@
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../../components/Logo'
 import { useAuth }     from '../../context/AuthContext'
@@ -27,20 +28,21 @@ function CurrencyToggle() {
 }
 
 export default function Wishlist() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const isMobile  = useIsMobile()
   const { user, role, signOut }            = useAuth()
   const { addToCart, totalItems }          = useCart()
   const { wishlist, toggleWishlist }       = useWishlist()
   const { formatPrice }                    = useCurrency()
 
   return (
-    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
+    <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans, overflowX: 'hidden' }}>
 
       <div style={{ background: S.dark, color: S.gold, textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         FREE SHIPPING ON ORDERS ABOVE ₹999 · AUTHENTIC NORTHEAST INDIA
       </div>
 
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
         <div style={{ display: 'flex', gap: '28px' }}>
           {['Products','Artisans','Our Story','States'].map(item => (
@@ -79,7 +81,7 @@ export default function Wishlist() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '40px' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px' }}>
         <p style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, marginBottom: '8px', fontFamily: S.sans }}>HOME / WISHLIST</p>
         <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark, marginBottom: '32px' }}>
           My Wishlist ({wishlist.length} {wishlist.length === 1 ? 'item' : 'items'})
@@ -98,7 +100,7 @@ export default function Wishlist() {
             </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '24px' }}>
             {wishlist.map(product => (
               <div key={product.id} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', overflow: 'hidden' }}>
                 <div onClick={() => navigate(`/product/${product.id}`)}
@@ -132,7 +134,7 @@ export default function Wishlist() {
         )}
       </div>
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px' }}>
+      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px' }}>
         <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
         <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>© 2026 BIHAAN · NORTHEAST INDIA</p>
       </footer>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
@@ -11,7 +12,8 @@ const S = {
 }
 
 export default function Login() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const isMobile  = useIsMobile()
 
   // tabs: 'email' or 'phone'
   const [tab,      setTab]      = useState('email')
@@ -126,13 +128,13 @@ export default function Login() {
   }
 
   return (
-    <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: S.sans }}>
+    <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: S.sans, overflowX: 'hidden' }}>
 
       <div style={{ background: '#1a1208', color: '#c9922a', textAlign: 'center', padding: '8px', fontSize: '11px', letterSpacing: '.15em' }}>
         AUTHENTIC NORTHEAST INDIA · 50+ VERIFIED ARTISANS
       </div>
 
-      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
