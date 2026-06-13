@@ -79,20 +79,17 @@ function ProductCard({ product, navigate }) {
           </div>
         )}
 
-        {/* Wishlist */}
         <button onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
           style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px' }}>
           {wishlisted ? '❤️' : '🤍'}
         </button>
 
-        {/* Only X left */}
         {product.stock <= 3 && product.stock > 0 && (
           <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', letterSpacing: '.08em', padding: '3px 7px', fontFamily: S.sans }}>
             ONLY {product.stock} LEFT
           </div>
         )}
 
-        {/* Quick view */}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px', background: 'linear-gradient(0deg,rgba(26,18,8,.65) 0%,transparent 100%)', display: 'flex', justifyContent: 'center' }}
           className="opacity-0 group-hover:opacity-100 transition-opacity">
           <span style={{ color: '#fff', fontSize: '10px', letterSpacing: '.15em', fontFamily: S.sans }}>QUICK VIEW</span>
@@ -108,6 +105,7 @@ function ProductCard({ product, navigate }) {
 }
 
 function NavBar({ navigate }) {
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside NavBar
   const { user, role, signOut } = useAuth()
   const { totalItems }          = useCart()
   const { wishlist }            = useWishlist()
@@ -245,7 +243,6 @@ export default function Home() {
               </div>
             )
           })}
-          {/* Fallback if no products yet */}
           {products.length === 0 && [
             { bg: '#f9f0e8', emoji: '🧵', label: 'ASSAM · SILK & TEXTILES', title: 'Muga Silk Saree', price: '4,500', span: 2, h: '190px' },
             { bg: '#edf5ee', emoji: '🎋', label: 'TRIPURA', title: 'Bamboo Lamp', price: '850', span: 1, h: '150px' },
@@ -278,29 +275,20 @@ export default function Home() {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '190px 1fr', gap: 0, maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '24px 16px' : '36px 40px' }}>
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
-
-          {/* States accordion */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>BY STATE</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-
-            {/* All */}
             <button onClick={() => setSelectedState(null)}
               style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: !selectedState ? `2px solid ${S.accent}` : '2px solid transparent', background: !selectedState ? '#fef5f3' : 'transparent', color: !selectedState ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
               All States
             </button>
-
-            {/* Each state with accordion */}
             {states.map(s => (
               <div key={s}>
-                {/* State button */}
                 <button
                   onClick={() => setSelectedState(selectedState === s ? null : s)}
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: selectedState === s ? `2px solid ${S.accent}` : '2px solid transparent', background: selectedState === s ? '#fef5f3' : 'transparent', color: selectedState === s ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
                   <span>{s}</span>
                   <span style={{ fontSize: '10px', color: S.muted }}>{selectedState === s ? '▲' : '▼'}</span>
                 </button>
-
-                {/* Categories — expand when state is selected */}
                 {selectedState === s && (
                   <div style={{ background: '#fef9f7', borderLeft: `2px solid ${S.accent}`, marginBottom: '4px' }}>
                     {[
@@ -320,7 +308,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-
         </div>
 
         {/* Products */}
@@ -339,7 +326,7 @@ export default function Home() {
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '20px' }}>
               {[1,2,3,4,5,6,7,8].map(i => (
                 <div key={i}>
-                  <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px', animation: 'pulse 1.5s infinite' }} />
+                  <div style={{ aspectRatio: '3/4', background: S.border, borderRadius: '4px', marginBottom: '12px' }} />
                   <div style={{ height: '12px', background: S.border, borderRadius: '2px', marginBottom: '8px', width: '60%' }} />
                   <div style={{ height: '10px', background: S.border, borderRadius: '2px', width: '80%' }} />
                 </div>
