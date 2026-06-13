@@ -42,6 +42,7 @@ function CurrencyToggle() {
 }
 
 function NavBar({ navigate, user, role, signOut, totalItems }) {
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside NavBar
   const { wishlist } = useWishlist()
   return (
     <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -78,6 +79,8 @@ function NavBar({ navigate, user, role, signOut, totalItems }) {
 }
 
 export default function ProductDetail() {
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside ProductDetail
+
   const { id }                    = useParams()
   const navigate                  = useNavigate()
   const { addToCart, totalItems } = useCart()
@@ -102,7 +105,6 @@ export default function ProductDetail() {
     setLoading(true)
     setSelectedImage(0)
 
-    // Fetch product
     const { data: prod } = await supabase
       .from('products')
       .select('*')
@@ -112,7 +114,6 @@ export default function ProductDetail() {
     if (!prod) { navigate('/products'); return }
     setProduct(prod)
 
-    // Fetch seller info
     if (prod.seller_id) {
       const { data: sellerData } = await supabase
         .from('sellers')
@@ -122,7 +123,6 @@ export default function ProductDetail() {
       setSeller(sellerData)
     }
 
-    // Fetch related products (same category)
     const { data: relatedData } = await supabase
       .from('products')
       .select('*')
@@ -132,7 +132,6 @@ export default function ProductDetail() {
       .limit(4)
     setRelated(relatedData || [])
 
-    // Track recently viewed
     try {
       const stored = JSON.parse(localStorage.getItem('bihaan_viewed') || '[]')
       const filtered = stored.filter(p => p.id !== prod.id)
@@ -198,7 +197,6 @@ export default function ProductDetail() {
               </div>
             )}
           </div>
-          {/* Thumbnails */}
           {hasImages && product.images.length > 1 && (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '8px' }}>
               {product.images.map((img, i) => (
@@ -238,7 +236,6 @@ export default function ProductDetail() {
             </span>
           </div>
 
-          {/* Stock urgency */}
           {product.stock <= 3 && product.stock > 0 && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px', marginBottom: '16px' }}>
               <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>

@@ -49,6 +49,8 @@ function CurrencyToggle() {
 }
 
 export default function Products() {
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside Products
+
   const navigate                           = useNavigate()
   const [searchParams]                     = useSearchParams()
   const { user, role, signOut }            = useAuth()
@@ -155,17 +157,14 @@ export default function Products() {
         {/* Sidebar */}
         <div style={{ paddingRight: '28px', borderRight: `1px solid ${S.border}` }}>
 
-          {/* States accordion */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>BY STATE</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginBottom: '28px' }}>
 
-            {/* All States */}
             <button onClick={() => { setState('All'); setCat('All Products') }}
               style={{ padding: '8px 10px', fontSize: '13px', cursor: 'pointer', border: 'none', borderLeft: state === 'All' ? `2px solid ${S.accent}` : '2px solid transparent', background: state === 'All' ? '#fef5f3' : 'transparent', color: state === 'All' ? S.accent : S.dark, width: '100%', textAlign: 'left', fontFamily: S.sans }}>
               All States
             </button>
 
-            {/* Each state with accordion */}
             {states.slice(1).map(s => (
               <div key={s}>
                 <button
@@ -175,7 +174,6 @@ export default function Products() {
                   <span style={{ fontSize: '10px', color: S.muted }}>{state === s ? '▲' : '▼'}</span>
                 </button>
 
-                {/* Categories expand under state */}
                 {state === s && (
                   <div style={{ background: '#fef9f7', borderLeft: `2px solid ${S.accent}`, marginBottom: '4px' }}>
                     {[
@@ -196,7 +194,6 @@ export default function Products() {
             ))}
           </div>
 
-          {/* Price range */}
           <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.muted, marginBottom: '10px', paddingBottom: '8px', borderBottom: `1px solid ${S.border}`, fontFamily: S.sans }}>MAX PRICE</p>
           <input type="range" min="300" max="10000" step="100" value={priceMax} onChange={e => setPriceMax(Number(e.target.value))}
             style={{ width: '100%', accentColor: S.accent, marginBottom: '6px' }} />
@@ -255,12 +252,10 @@ export default function Products() {
                           <span style={{ fontSize: '48px', opacity: .5 }}>{style.emoji}</span>
                         </div>
                       )}
-                      {/* Wishlist */}
                       <button onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
                         style={{ position: 'absolute', top: '7px', right: '7px', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '13px' }}>
                         {wishlisted ? '❤️' : '🤍'}
                       </button>
-                      {/* Only X left */}
                       {product.stock <= 3 && product.stock > 0 && (
                         <div style={{ position: 'absolute', bottom: '7px', left: '7px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', letterSpacing: '.08em', padding: '3px 7px', fontFamily: S.sans }}>
                           ONLY {product.stock} LEFT

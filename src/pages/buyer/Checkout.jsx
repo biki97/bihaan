@@ -30,9 +30,11 @@ function CurrencyToggle() {
 }
 
 export default function Checkout() {
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside Checkout
+
   const navigate                         = useNavigate()
   const { cart, totalAmount, clearCart } = useCart()
-  const { user, role, signOut }           = useAuth()
+  const { user, role, signOut }          = useAuth()
   const { wishlist }                     = useWishlist()
   const [loading, setLoading]            = useState(false)
   const [form,    setForm]               = useState({
@@ -95,7 +97,6 @@ export default function Checkout() {
       handler: async function (response) {
         await saveOrder(response.razorpay_payment_id, response.razorpay_order_id || 'test')
 
-        // Send emails
         try {
           await fetch('/api/send-email', {
             method: 'POST',
@@ -192,7 +193,7 @@ export default function Checkout() {
         </p>
       </div>
 
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '40px', alignItems: 'start' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 380px', gap: '40px', alignItems: 'start' }}>
 
         {/* Delivery form */}
         <div>

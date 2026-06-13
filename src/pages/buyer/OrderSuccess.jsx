@@ -28,10 +28,12 @@ function CurrencyToggle() {
 }
 
 export default function OrderSuccess() {
-  const navigate           = useNavigate()
+  const isMobile = useIsMobile() // ✅ FIXED: hook called inside OrderSuccess
+
+  const navigate                = useNavigate()
   const { user, role, signOut } = useAuth()
-  const { totalItems }     = useCart()
-  const { wishlist }       = useWishlist()
+  const { totalItems }          = useCart()
+  const { wishlist }            = useWishlist()
 
   return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: S.sans, overflowX: 'hidden' }}>
@@ -48,7 +50,6 @@ export default function OrderSuccess() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <CurrencyToggle />
 
-          {/* Wishlist */}
           <span onClick={() => navigate('/wishlist')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
             🤍
             {wishlist.length > 0 && (
@@ -58,7 +59,6 @@ export default function OrderSuccess() {
             )}
           </span>
 
-          {/* Cart */}
           <span onClick={() => navigate('/cart')} style={{ fontSize: '18px', cursor: 'pointer', position: 'relative' }}>
             🛒
             {totalItems > 0 && (
@@ -68,7 +68,6 @@ export default function OrderSuccess() {
             )}
           </span>
 
-          {/* Auth */}
           {user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
