@@ -16,10 +16,12 @@ const ADMIN_EMAIL = 'bikidutta319@gmail.com'
 export default function AdminDashboard() {
   const navigate        = useNavigate()
   const { user }        = useAuth()
-  const [tab,     setTab]     = useState('sellers')
-  const [sellers, setSellers] = useState([])
-  const [orders,  setOrders]  = useState([])
-  const [loading, setLoading] = useState(true)
+  const [tab,      setTab]      = useState('sellers')
+  const [sellers,  setSellers]  = useState([])
+  const [orders,   setOrders]   = useState([])
+  const [items,    setItems]    = useState([])   // order_items joined with seller + product
+  const [loading,  setLoading]  = useState(true)
+  const [savingId, setSavingId] = useState(null)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -40,8 +42,20 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false })
 
+    // Pull every order_item, plus the seller's shop/email and the product title.
+    // If seller_id is null on a row, the seller join just comes back null — handled below.
+    const { data: itemsData } = await supabase
+      .from('order_items')
+      .select(`
+        *,
+        products ( title ),
+        sellers ( shop_name, profiles ( email ) )
+      `)
+      .order('id', { ascending: false })
+
     setSellers(sellersData || [])
     setOrders(ordersData || [])
+    setItems(itemsData || [])
     setLoading(false)
   }
 
@@ -55,9 +69,50 @@ export default function AdminDashboard() {
     loadData()
   }
 
+  // Mark every pending item for one seller as paid
+  async function markSellerPaid(sellerKey, itemIds) {
+    setSavingId(sellerKey)
+    await supabase
+      .from('order_items')
+      .update({ payout_status: 'paid' })
+      .in('id', itemIds)
+    await loadData()
+    setSavingId(null)
+  }
+
+  // ── Stats ──
   const totalRevenue   = orders.reduce((s, o) => s + (Number(o.total_amount) * 0.1), 0)
   const pendingSellers = sellers.filter(s => !s.is_approved).length
-  const paidOrders     = orders.filter(o => o.status === 'paid').length
+
+  // ── Group order_items by seller, splitting pending vs paid ──
+  // Each group: { key, shopName, email, pendingAmount, pendingItemIds, paidAmount, orderCount }
+  const payoutGroups = {}
+  for (const it of items) {
+    const key      = it.seller_id || 'unassigned'
+    const shopName = it.sellers?.shop_name || (it.seller_id ? 'Unknown shop' : 'Unassigned seller')
+    const email    = it.sellers?.profiles?.email || '—'
+    const amount   = Number(it.seller_amount) || 0
+
+    if (!payoutGroups[key]) {
+      payoutGroups[key] = {
+        key, shopName, email,
+        pendingAmount: 0, pendingItemIds: [],
+        paidAmount: 0, itemCount: 0,
+      }
+    }
+    const g = payoutGroups[key]
+    g.itemCount += 1
+    if (it.payout_status === 'paid') {
+      g.paidAmount += amount
+    } else {
+      g.pendingAmount += amount
+      g.pendingItemIds.push(it.id)
+    }
+  }
+  const payoutList = Object.values(payoutGroups)
+    .sort((a, b) => b.pendingAmount - a.pendingAmount)
+
+  const totalPending = payoutList.reduce((s, g) => s + g.pendingAmount, 0)
 
   if (loading) return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -112,10 +167,14 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '2px', marginBottom: '28px', borderBottom: `1px solid ${S.border}` }}>
-          {['sellers', 'orders'].map(t => (
+          {[
+            ['sellers', `SELLERS (${sellers.length})`],
+            ['orders',  `ORDERS (${orders.length})`],
+            ['payouts', `PAYOUTS (₹${Math.round(totalPending).toLocaleString()} due)`],
+          ].map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               style={{ padding: '10px 20px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans, background: 'transparent', color: tab === t ? S.accent : S.muted, borderBottom: tab === t ? `2px solid ${S.accent}` : '2px solid transparent', marginBottom: '-1px' }}>
-              {t === 'sellers' ? `SELLERS (${sellers.length})` : `ORDERS (${orders.length})`}
+              {label}
             </button>
           ))}
         </div>
@@ -200,6 +259,73 @@ export default function AdminDashboard() {
                   <p style={{ fontSize: '11px', color: '#15803d', fontFamily: S.sans }}>
                     +₹{Math.round(Number(order.total_amount) * 0.1).toLocaleString()} platform fee
                   </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Payouts tab */}
+        {tab === 'payouts' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            {/* Summary line */}
+            <div style={{ background: '#fef9f7', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '16px 20px', borderRadius: '3px', marginBottom: '8px' }}>
+              <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
+                You owe sellers a total of <strong>₹{Math.round(totalPending).toLocaleString()}</strong> across {payoutList.filter(g => g.pendingAmount > 0).length} seller(s).
+                Pay them by UPI/bank transfer, then mark as paid here.
+              </p>
+            </div>
+
+            {payoutList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No payouts yet</p>
+                <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '6px' }}>
+                  Seller payout records appear here once orders come in.
+                </p>
+              </div>
+            ) : payoutList.map(g => (
+              <div key={g.key} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'center' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                    <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: g.key === 'unassigned' ? S.accent : S.dark }}>
+                      {g.shopName}
+                    </p>
+                    {g.pendingAmount > 0 ? (
+                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#fef5e7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                        PAYMENT DUE
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac' }}>
+                        ALL PAID
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>
+                    {g.email} · {g.itemCount} item(s)
+                  </p>
+                  <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
+                    Pending: <strong style={{ color: S.dark }}>₹{Math.round(g.pendingAmount).toLocaleString()}</strong>
+                    {g.paidAmount > 0 && <span> · Already paid: ₹{Math.round(g.paidAmount).toLocaleString()}</span>}
+                  </p>
+                  {g.key === 'unassigned' && (
+                    <p style={{ fontSize: '11px', color: S.accent, fontFamily: S.sans, marginTop: '6px' }}>
+                      ⚠ These items have no seller linked. Fix product seller_id so future orders attribute correctly.
+                    </p>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontFamily: S.serif, fontSize: '1.4rem', color: S.dark, marginBottom: '8px' }}>
+                    ₹{Math.round(g.pendingAmount).toLocaleString()}
+                  </p>
+                  {g.pendingAmount > 0 && g.key !== 'unassigned' && (
+                    <button
+                      onClick={() => markSellerPaid(g.key, g.pendingItemIds)}
+                      disabled={savingId === g.key}
+                      style={{ background: savingId === g.key ? '#888' : '#15803d', color: '#fff', padding: '8px 16px', fontSize: '11px', letterSpacing: '.08em', border: 'none', cursor: savingId === g.key ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                      {savingId === g.key ? 'SAVING...' : 'MARK AS PAID'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

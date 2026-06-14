@@ -30,7 +30,7 @@ function CurrencyToggle() {
 }
 
 export default function Checkout() {
-  const isMobile = useIsMobile() // ✅ FIXED: hook called inside Checkout
+  const isMobile = useIsMobile()
 
   const navigate                         = useNavigate()
   const { cart, totalAmount, clearCart } = useCart()
@@ -68,11 +68,12 @@ export default function Checkout() {
         cart.map(item => ({
           order_id:        order.id,
           product_id:      item.id,
-          seller_id:       null,
+          seller_id:       item.seller_id || null,                 // now carries the real seller
           quantity:        item.qty,
           price:           item.price,
-          seller_amount:   Math.round(item.price * 0.9),
-          platform_amount: Math.round(item.price * 0.1),
+          seller_amount:   Math.round(item.price * item.qty * 0.9),   // quantity-correct (90% to seller)
+          platform_amount: Math.round(item.price * item.qty * 0.1),   // quantity-correct (10% your fee)
+          payout_status:   'pending',                              // starts unpaid; you mark paid in admin
         }))
       )
     }
