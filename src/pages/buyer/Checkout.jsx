@@ -15,6 +15,10 @@ const S = {
   sans: "'Inter', system-ui, sans-serif",
 }
 
+// ── COD settings ──
+const COD_LIMIT = 2000   // COD only available for orders at/under this amount
+const COD_FEE   = 40     // extra fee added to COD orders
+
 function CurrencyToggle() {
   const { currency, setCurrency } = useCurrency()
   return (
@@ -37,28 +41,43 @@ export default function Checkout() {
   const { user, role, signOut }          = useAuth()
   const { wishlist }                     = useWishlist()
   const [loading, setLoading]            = useState(false)
+  const [payMethod, setPayMethod]        = useState('online')   // 'online' | 'cod'
   const [form,    setForm]               = useState({
     name: '', phone: '', address: '',
     city: '', state: '', pincode: ''
   })
 
-  const shipping = totalAmount >= 999 ? 0 : 99
-  const total    = totalAmount + shipping
+  const shipping     = totalAmount >= 999 ? 0 : 99
+  // COD only allowed at/under the limit
+  const codAvailable = totalAmount <= COD_LIMIT
+  // If COD selected (and allowed), add the COD fee
+  const codFee       = (payMethod === 'cod' && codAvailable) ? COD_FEE : 0
+  const total        = totalAmount + shipping + codFee
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  async function saveOrder(paymentId, orderId) {
+  function validateForm() {
+    if (!form.name || !form.phone || !form.address || !form.city || !form.pincode) {
+      alert('Please fill in all delivery details')
+      return false
+    }
+    return true
+  }
+
+  // Shared: saves order + items. status differs for online vs cod.
+  async function saveOrder({ status, paymentId, orderId, method }) {
     const { data: order } = await supabase
       .from('orders')
       .insert({
         buyer_id:            user?.id,
         total_amount:        total,
-        status:              'paid',
+        status:              status,            // 'paid' for online, 'cod_pending' for COD
+        payment_method:      method,            // 'online' | 'cod'
         shipping_address:    JSON.stringify(form),
-        razorpay_order_id:   orderId,
-        razorpay_payment_id: paymentId,
+        razorpay_order_id:   orderId || null,
+        razorpay_payment_id: paymentId || null,
       })
       .select()
       .single()
@@ -68,24 +87,50 @@ export default function Checkout() {
         cart.map(item => ({
           order_id:        order.id,
           product_id:      item.id,
-          seller_id:       item.seller_id || null,                 // now carries the real seller
+          seller_id:       item.seller_id || null,
           quantity:        item.qty,
           price:           item.price,
-          seller_amount:   Math.round(item.price * item.qty * 0.9),   // quantity-correct (90% to seller)
-          platform_amount: Math.round(item.price * item.qty * 0.1),   // quantity-correct (10% your fee)
-          payout_status:   'pending',                              // starts unpaid; you mark paid in admin
+          seller_amount:   Math.round(item.price * item.qty * 0.9),
+          platform_amount: Math.round(item.price * item.qty * 0.1),
+          payout_status:   'pending',
         }))
       )
     }
     return order
   }
 
-  async function handlePayment() {
-    if (!form.name || !form.phone || !form.address || !form.city || !form.pincode) {
-      alert('Please fill in all delivery details')
-      return
+  async function sendEmails() {
+    try {
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type:       'order_confirmation',
+          buyerEmail: user?.email,
+          buyerName:  form.name,
+          order:      { total },
+          items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
+        })
+      })
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type:       'new_order_seller',
+          buyerEmail: user?.email,
+          buyerName:  form.name,
+          order:      { total },
+          items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
+        })
+      })
+    } catch (emailErr) {
+      console.log('Email failed silently:', emailErr)
     }
+  }
 
+  // ── ONLINE PAYMENT (Razorpay) ──
+  async function handleOnlinePayment() {
+    if (!validateForm()) return
     setLoading(true)
 
     const options = {
@@ -96,35 +141,13 @@ export default function Checkout() {
       description: `Order of ${cart.length} item${cart.length > 1 ? 's' : ''}`,
 
       handler: async function (response) {
-        await saveOrder(response.razorpay_payment_id, response.razorpay_order_id || 'test')
-
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type:       'order_confirmation',
-              buyerEmail: user?.email,
-              buyerName:  form.name,
-              order:      { total },
-              items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
-            })
-          })
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type:       'new_order_seller',
-              buyerEmail: user?.email,
-              buyerName:  form.name,
-              order:      { total },
-              items:      cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))
-            })
-          })
-        } catch (emailErr) {
-          console.log('Email failed silently:', emailErr)
-        }
-
+        await saveOrder({
+          status:    'paid',
+          method:    'online',
+          paymentId: response.razorpay_payment_id,
+          orderId:   response.razorpay_order_id || 'test',
+        })
+        await sendEmails()
         clearCart()
         navigate('/order-success')
       },
@@ -141,6 +164,38 @@ export default function Checkout() {
     const rzp = new window.Razorpay(options)
     rzp.open()
     setLoading(false)
+  }
+
+  // ── CASH ON DELIVERY (no Razorpay) ──
+  async function handleCOD() {
+    if (!validateForm()) return
+    setLoading(true)
+    try {
+      const order = await saveOrder({
+        status: 'cod_pending',   // cash NOT yet collected
+        method: 'cod',
+      })
+      if (order) {
+        await sendEmails()
+        clearCart()
+        navigate('/order-success')
+      } else {
+        alert('Could not place order. Please try again.')
+      }
+    } catch (err) {
+      console.log('COD order failed:', err)
+      alert('Could not place order. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handlePlaceOrder() {
+    if (payMethod === 'cod' && codAvailable) {
+      handleCOD()
+    } else {
+      handleOnlinePayment()
+    }
   }
 
   if (cart.length === 0) {
@@ -242,12 +297,39 @@ export default function Checkout() {
             </div>
           </div>
 
-          <div style={{ marginTop: '32px', padding: '20px', background: S.white, border: `1px solid ${S.border}` }}>
-            <p style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, marginBottom: '12px', fontFamily: S.sans }}>ACCEPTED PAYMENTS</p>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallets'].map(p => (
-                <span key={p} style={{ fontSize: '11px', padding: '4px 10px', border: `1px solid ${S.border}`, color: S.muted, fontFamily: S.sans }}>{p}</span>
-              ))}
+          {/* Payment method selector */}
+          <div style={{ marginTop: '32px' }}>
+            <p style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, marginBottom: '12px', fontFamily: S.sans }}>PAYMENT METHOD</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+              {/* Online */}
+              <div onClick={() => setPayMethod('online')}
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', border: `1px solid ${payMethod === 'online' ? S.accent : S.border}`, background: payMethod === 'online' ? '#fef9f7' : S.white, borderRadius: '4px', cursor: 'pointer' }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${payMethod === 'online' ? S.accent : S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {payMethod === 'online' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: S.accent }} />}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, fontWeight: 500 }}>Pay Online</p>
+                  <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>UPI, Card, Net Banking, Wallets · Secured by Razorpay</p>
+                </div>
+              </div>
+
+              {/* COD */}
+              <div onClick={() => codAvailable && setPayMethod('cod')}
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', border: `1px solid ${payMethod === 'cod' && codAvailable ? S.accent : S.border}`, background: payMethod === 'cod' && codAvailable ? '#fef9f7' : S.white, borderRadius: '4px', cursor: codAvailable ? 'pointer' : 'not-allowed', opacity: codAvailable ? 1 : 0.55 }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${payMethod === 'cod' && codAvailable ? S.accent : S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {payMethod === 'cod' && codAvailable && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: S.accent }} />}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, fontWeight: 500 }}>Cash on Delivery</p>
+                  {codAvailable ? (
+                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Pay ₹{COD_FEE} extra · Pay cash when your order arrives</p>
+                  ) : (
+                    <p style={{ fontSize: '11px', color: S.accent, fontFamily: S.sans }}>Not available for orders above ₹{COD_LIMIT.toLocaleString()}</p>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -289,6 +371,12 @@ export default function Checkout() {
                 {shipping === 0 ? 'FREE' : `₹${shipping}`}
               </span>
             </div>
+            {codFee > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontFamily: S.sans }}>
+                <span style={{ color: S.muted }}>COD fee</span>
+                <span style={{ color: S.dark }}>₹{codFee}</span>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -296,9 +384,13 @@ export default function Checkout() {
             <span style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>₹{total.toLocaleString()}</span>
           </div>
 
-          <button onClick={handlePayment} disabled={loading}
+          <button onClick={handlePlaceOrder} disabled={loading}
             style={{ width: '100%', background: loading ? '#888' : S.accent, color: '#fff', padding: '14px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: S.sans, marginBottom: '12px', transition: 'background .2s' }}>
-            {loading ? 'PROCESSING...' : `PAY ₹${total.toLocaleString()}`}
+            {loading
+              ? 'PROCESSING...'
+              : (payMethod === 'cod' && codAvailable)
+                ? `PLACE ORDER · PAY ₹${total.toLocaleString()} ON DELIVERY`
+                : `PAY ₹${total.toLocaleString()}`}
           </button>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

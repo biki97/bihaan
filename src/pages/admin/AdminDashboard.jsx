@@ -49,7 +49,8 @@ export default function AdminDashboard() {
       .select(`
         *,
         products ( title ),
-        sellers ( shop_name, profiles ( email ) )
+        sellers ( shop_name, profiles ( email ) ),
+        orders ( status, payment_method )
       `)
       .order('id', { ascending: false })
 
@@ -85,25 +86,31 @@ export default function AdminDashboard() {
   const pendingSellers = sellers.filter(s => !s.is_approved).length
 
   // ── Group order_items by seller, splitting pending vs paid ──
-  // Each group: { key, shopName, email, pendingAmount, pendingItemIds, paidAmount, orderCount }
+  // COD orders not yet collected are tracked separately so you don't pay before cash arrives.
   const payoutGroups = {}
   for (const it of items) {
     const key      = it.seller_id || 'unassigned'
     const shopName = it.sellers?.shop_name || (it.seller_id ? 'Unknown shop' : 'Unassigned seller')
     const email    = it.sellers?.profiles?.email || '—'
     const amount   = Number(it.seller_amount) || 0
+    // COD order where cash hasn't been collected yet
+    const isCodUncollected = it.orders?.payment_method === 'cod' && it.orders?.status === 'cod_pending'
 
     if (!payoutGroups[key]) {
       payoutGroups[key] = {
         key, shopName, email,
         pendingAmount: 0, pendingItemIds: [],
         paidAmount: 0, itemCount: 0,
+        codPendingAmount: 0,   // money tied to COD orders not yet collected
       }
     }
     const g = payoutGroups[key]
     g.itemCount += 1
     if (it.payout_status === 'paid') {
       g.paidAmount += amount
+    } else if (isCodUncollected) {
+      // Show it, but separately — cash not in hand yet, don't pay
+      g.codPendingAmount += amount
     } else {
       g.pendingAmount += amount
       g.pendingItemIds.push(it.id)
@@ -308,6 +315,11 @@ export default function AdminDashboard() {
                     Pending: <strong style={{ color: S.dark }}>₹{Math.round(g.pendingAmount).toLocaleString()}</strong>
                     {g.paidAmount > 0 && <span> · Already paid: ₹{Math.round(g.paidAmount).toLocaleString()}</span>}
                   </p>
+                  {g.codPendingAmount > 0 && (
+                    <p style={{ fontSize: '11px', color: '#92400e', fontFamily: S.sans, marginTop: '6px', background: '#fef5e7', border: '1px solid #fcd34d', padding: '6px 10px', borderRadius: '3px' }}>
+                      ⚠ ₹{Math.round(g.codPendingAmount).toLocaleString()} is from COD orders — cash NOT yet collected. Do not pay this until the order is delivered and you've received the cash.
+                    </p>
+                  )}
                   {g.key === 'unassigned' && (
                     <p style={{ fontSize: '11px', color: S.accent, fontFamily: S.sans, marginTop: '6px' }}>
                       ⚠ These items have no seller linked. Fix product seller_id so future orders attribute correctly.

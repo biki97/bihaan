@@ -101,35 +101,47 @@ export default function Wishlist() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '24px' }}>
-            {wishlist.map(product => (
-              <div key={product.id} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', overflow: 'hidden' }}>
-                <div onClick={() => navigate(`/product/${product.id}`)}
-                  style={{ aspectRatio: '3/4', background: product.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
-                  <span style={{ fontSize: '56px', opacity: .6 }}>{product.emoji}</span>
-                  {product.stock <= 3 && (
-                    <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', padding: '3px 7px', fontFamily: S.sans }}>
-                      ONLY {product.stock} LEFT
+            {wishlist.map(product => {
+              // Products from Supabase use `title`; some saved items may use `name`. Support both.
+              const displayName = product.title || product.name || 'Untitled'
+              const hasImage    = product.images && product.images[0]
+              return (
+                <div key={product.id} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', overflow: 'hidden' }}>
+                  <div onClick={() => navigate(`/product/${product.id}`)}
+                    style={{ aspectRatio: '3/4', background: product.bg || '#f5f0e8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
+                    {hasImage ? (
+                      <img src={product.images[0]} alt={displayName}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: '56px', opacity: .6 }}>{product.emoji || '🛍️'}</span>
+                    )}
+                    {product.stock <= 3 && product.stock > 0 && (
+                      <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(26,18,8,0.85)', color: '#fff', fontSize: '9px', padding: '3px 7px', fontFamily: S.sans }}>
+                        ONLY {product.stock} LEFT
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '16px' }}>
+                    <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '4px', fontFamily: S.sans }}>{product.state?.toUpperCase()}</p>
+                    <p style={{ fontFamily: S.serif, fontSize: '15px', color: S.dark, marginBottom: '4px' }}>{displayName}</p>
+                    {product.category && (
+                      <p style={{ fontSize: '11px', color: S.muted, marginBottom: '12px', fontFamily: S.sans }}>{product.category}</p>
+                    )}
+                    <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark, marginBottom: '12px' }}>{formatPrice(product.price)}</p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => addToCart({ ...product, name: displayName }, 1)}
+                        style={{ flex: 1, background: S.dark, color: '#fff', padding: '10px', fontSize: '11px', letterSpacing: '.08em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                        ADD TO CART
+                      </button>
+                      <button onClick={() => toggleWishlist(product)}
+                        style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '14px', borderRadius: '3px' }}>
+                        🗑️
+                      </button>
                     </div>
-                  )}
-                </div>
-                <div style={{ padding: '16px' }}>
-                  <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '4px', fontFamily: S.sans }}>{product.state?.toUpperCase()}</p>
-                  <p style={{ fontFamily: S.serif, fontSize: '15px', color: S.dark, marginBottom: '4px' }}>{product.name}</p>
-                  <p style={{ fontSize: '11px', color: S.muted, marginBottom: '12px', fontFamily: S.sans }}>by {product.seller}</p>
-                  <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark, marginBottom: '12px' }}>{formatPrice(product.price)}</p>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => addToCart(product, 1)}
-                      style={{ flex: 1, background: S.dark, color: '#fff', padding: '10px', fontSize: '11px', letterSpacing: '.08em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-                      ADD TO CART
-                    </button>
-                    <button onClick={() => toggleWishlist(product)}
-                      style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', cursor: 'pointer', fontSize: '14px', borderRadius: '3px' }}>
-                      🗑️
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
