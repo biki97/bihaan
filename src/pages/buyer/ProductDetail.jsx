@@ -96,6 +96,7 @@ export default function ProductDetail() {
   const [selectedImage,  setSelectedImage]  = useState(0)
   const [qty,            setQty]            = useState(1)
   const [added,          setAdded]          = useState(false)
+  const [isOwnProduct,   setIsOwnProduct]   = useState(false)  // is the logged-in user the seller of THIS product?
 
   useEffect(() => {
     loadProduct()
@@ -117,10 +118,14 @@ export default function ProductDetail() {
     if (prod.seller_id) {
       const { data: sellerData } = await supabase
         .from('sellers')
-        .select('shop_name, state, district, description')
+        .select('shop_name, state, district, description, user_id')
         .eq('id', prod.seller_id)
         .single()
       setSeller(sellerData)
+      // Block buying your own product: does this product's seller belong to the logged-in user?
+      setIsOwnProduct(!!user && sellerData?.user_id === user.id)
+    } else {
+      setIsOwnProduct(false)
     }
 
     const { data: relatedData } = await supabase
@@ -261,26 +266,43 @@ export default function ProductDetail() {
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${S.border}` }}>
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>−</button>
-              <span style={{ padding: '10px 16px', fontSize: '14px', color: S.dark, fontFamily: S.sans, minWidth: '40px', textAlign: 'center' }}>{qty}</span>
-              <button onClick={() => setQty(q => Math.min(product.stock, q + 1))} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>+</button>
+          {isOwnProduct ? (
+            // Seller viewing their OWN product — no buying, just a notice + manage link
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ background: '#eef3f8', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '14px 16px', borderRadius: '3px', marginBottom: '12px' }}>
+                <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
+                  This is your own product — you can't purchase it.
+                </p>
+              </div>
+              <button onClick={() => navigate('/seller/dashboard')}
+                style={{ width: '100%', background: S.dark, color: '#fff', padding: '13px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                GO TO MY DASHBOARD
+              </button>
             </div>
-            <button onClick={handleAddToCart}
-              style={{ flex: 1, background: added ? '#2d6a4f' : S.dark, color: '#fff', padding: '12px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', transition: 'background .3s', fontFamily: S.sans }}>
-              {added ? '✓ ADDED TO CART' : 'ADD TO CART'}
-            </button>
-            <button onClick={() => toggleWishlist(product)}
-              style={{ padding: '12px 14px', background: wishlisted ? '#fef2f2' : S.white, border: `1px solid ${wishlisted ? '#fecaca' : S.border}`, cursor: 'pointer', fontSize: '18px', borderRadius: '3px' }}>
-              {wishlisted ? '❤️' : '🤍'}
-            </button>
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${S.border}` }}>
+                  <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>−</button>
+                  <span style={{ padding: '10px 16px', fontSize: '14px', color: S.dark, fontFamily: S.sans, minWidth: '40px', textAlign: 'center' }}>{qty}</span>
+                  <button onClick={() => setQty(q => Math.min(product.stock, q + 1))} style={{ padding: '10px 14px', background: 'transparent', border: 'none', fontSize: '16px', cursor: 'pointer', color: S.dark }}>+</button>
+                </div>
+                <button onClick={handleAddToCart}
+                  style={{ flex: 1, background: added ? '#2d6a4f' : S.dark, color: '#fff', padding: '12px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', transition: 'background .3s', fontFamily: S.sans }}>
+                  {added ? '✓ ADDED TO CART' : 'ADD TO CART'}
+                </button>
+                <button onClick={() => toggleWishlist(product)}
+                  style={{ padding: '12px 14px', background: wishlisted ? '#fef2f2' : S.white, border: `1px solid ${wishlisted ? '#fecaca' : S.border}`, cursor: 'pointer', fontSize: '18px', borderRadius: '3px' }}>
+                  {wishlisted ? '❤️' : '🤍'}
+                </button>
+              </div>
 
-          <button onClick={() => { handleAddToCart(); navigate('/cart') }}
-            style={{ width: '100%', background: S.accent, color: '#fff', padding: '13px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginBottom: '24px' }}>
-            BUY NOW — {formatPrice(product.price * qty)}
-          </button>
+              <button onClick={() => { handleAddToCart(); navigate('/cart') }}
+                style={{ width: '100%', background: S.accent, color: '#fff', padding: '13px', fontSize: '12px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginBottom: '24px' }}>
+                BUY NOW — {formatPrice(product.price * qty)}
+              </button>
+            </>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: '12px' }}>
             {[['✓','Verified authentic'],['⟳','Easy returns'],['🔒','Secure payment']].map(([icon, label]) => (
