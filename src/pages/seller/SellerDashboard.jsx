@@ -27,6 +27,33 @@ const timeOptions = [
   '5 days', '1 week', '2 weeks', '1 month'
 ]
 
+// ── CSV helpers (same approach as admin dashboard) ──
+function csvCell(value) {
+  const s = (value === null || value === undefined) ? '' : String(value)
+  return `"${s.replace(/"/g, '""')}"`
+}
+function downloadCSV(filename, headers, rows) {
+  const headerLine = headers.map(h => csvCell(h.label)).join(',')
+  const dataLines  = rows.map(row => headers.map(h => csvCell(h.value(row))).join(','))
+  const csv = [headerLine, ...dataLines].join('\n')
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+function parseAddress(raw) {
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+  } catch {
+    return {}
+  }
+}
+
 // ── Cloudinary upload ──
 async function uploadToCloudinary(file) {
   const formData = new FormData()
@@ -46,8 +73,6 @@ async function uploadToCloudinary(file) {
 // ── Build AI-enhanced URL from public_id ──
 function getEnhancedUrl(publicId) {
   const cloud = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-  // e_improve = AI improvement, e_sharpen = sharpening, e_vibrance = color boost
-  // q_auto = auto quality, f_auto = best format, w_800,h_1067,c_fill = 3:4 ratio
   return `https://res.cloudinary.com/${cloud}/image/upload/e_improve,e_sharpen:80,e_vibrance:20,q_auto,f_auto,w_800,h_1067,c_fill/${publicId}`
 }
 
@@ -114,7 +139,7 @@ export default function SellerDashboard() {
   const [tab,          setTab]          = useState('products')
   const [seller,       setSeller]       = useState(null)
   const [products,     setProducts]     = useState([])
-  const [orders,       setOrders]       = useState([])
+  const [orders,       setOrders]       = useState([])   // this seller's order items (with buyer address)
   const [loading,      setLoading]      = useState(true)
   const [aiLoading,    setAiLoading]    = useState(false)
   const [aiResult,     setAiResult]     = useState(null)
@@ -144,11 +169,49 @@ export default function SellerDashboard() {
       .from('sellers').select('*').eq('user_id', user.id).single()
     if (!sellerData) { navigate('/seller/register'); return }
     setSeller(sellerData)
+
     const { data: prods } = await supabase
       .from('products').select('*').eq('seller_id', sellerData.id)
       .order('created_at', { ascending: false })
     setProducts(prods || [])
+
+    // Load ONLY this seller's order items, joined to product title + the parent order
+    // (which holds buyer shipping address, status, date). RLS must allow seller to read own items.
+    const { data: orderItems } = await supabase
+      .from('order_items')
+      .select(`
+        *,
+        products ( title ),
+        orders ( created_at, status, payment_method, total_amount, shipping_address )
+      `)
+      .eq('seller_id', sellerData.id)
+      .order('id', { ascending: false })
+    setOrders(orderItems || [])
+
     setLoading(false)
+  }
+
+  // ── Download THIS seller's orders + buyer addresses ──
+  function downloadMyOrders() {
+    if (orders.length === 0) { alert('No orders to download yet'); return }
+    const today = new Date().toISOString().slice(0, 10)
+    downloadCSV(`my-orders-${today}.csv`,
+      [
+        { label: 'Order Date',    value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
+        { label: 'Product',       value: it => it.products?.title },
+        { label: 'Qty',           value: it => it.quantity },
+        { label: 'Your Earning (₹)', value: it => it.seller_amount },
+        { label: 'Status',        value: it => it.orders?.status },
+        { label: 'Payment',       value: it => it.orders?.payment_method || 'online' },
+        { label: 'Buyer Name',    value: it => parseAddress(it.orders?.shipping_address).name },
+        { label: 'Phone',         value: it => parseAddress(it.orders?.shipping_address).phone },
+        { label: 'Address',       value: it => parseAddress(it.orders?.shipping_address).address },
+        { label: 'City',          value: it => parseAddress(it.orders?.shipping_address).city },
+        { label: 'State',         value: it => parseAddress(it.orders?.shipping_address).state },
+        { label: 'Pincode',       value: it => parseAddress(it.orders?.shipping_address).pincode },
+      ],
+      orders
+    )
   }
 
   // ── Handle image upload ──
@@ -172,7 +235,6 @@ export default function SellerDashboard() {
     }
     setUploadedImages(prev => [...prev, ...newImages])
     setUploadingImages(false)
-    // Reset input so same file can be re-uploaded if needed
     e.target.value = ''
   }
 
@@ -299,7 +361,7 @@ export default function SellerDashboard() {
           {['products', 'add', 'orders'].map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ padding: '10px 20px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans, background: 'transparent', color: tab === t ? S.accent : S.muted, borderBottom: tab === t ? `2px solid ${S.accent}` : '2px solid transparent', marginBottom: '-1px' }}>
-              {t === 'products' ? 'MY PRODUCTS' : t === 'add' ? '+ ADD PRODUCT' : 'ORDERS'}
+              {t === 'products' ? 'MY PRODUCTS' : t === 'add' ? '+ ADD PRODUCT' : `ORDERS (${orders.length})`}
             </button>
           ))}
         </div>
@@ -320,7 +382,6 @@ export default function SellerDashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px' }}>
                 {products.map(p => (
                   <div key={p.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '0', borderRadius: '3px', overflow: 'hidden' }}>
-                    {/* Product image */}
                     {p.images && p.images[0] ? (
                       <img src={p.images[0]} alt={p.title}
                         style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', display: 'block' }} />
@@ -366,7 +427,6 @@ export default function SellerDashboard() {
                   </div>
                 </div>
 
-                {/* Upload area */}
                 {uploadedImages.length < 4 && (
                   <div
                     onClick={() => document.getElementById('image-upload').click()}
@@ -397,7 +457,6 @@ export default function SellerDashboard() {
                   </div>
                 )}
 
-                {/* Image previews */}
                 {uploadedImages.length > 0 && (
                   <div>
                     <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>
@@ -542,7 +601,6 @@ export default function SellerDashboard() {
                   </div>
                 </div>
 
-                {/* Image summary */}
                 {uploadedImages.length > 0 && (
                   <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '10px 14px', borderRadius: '3px' }}>
                     <p style={{ fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>
@@ -568,11 +626,63 @@ export default function SellerDashboard() {
           </div>
         )}
 
-        {/* Orders tab */}
+        {/* Orders tab — now shows real orders + download */}
         {tab === 'orders' && (
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark, marginBottom: '8px' }}>No orders yet</p>
-            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>Orders will appear here once buyers start purchasing your products</p>
+          <div>
+            {orders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark, marginBottom: '8px' }}>No orders yet</p>
+                <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>Orders will appear here once buyers start purchasing your products</p>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
+                    {orders.length} order item{orders.length > 1 ? 's' : ''} for your products
+                  </p>
+                  <button onClick={downloadMyOrders}
+                    style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
+                    ⬇ DOWNLOAD ORDERS + ADDRESSES (CSV)
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {orders.map(it => {
+                    const addr = parseAddress(it.orders?.shipping_address)
+                    return (
+                      <div key={it.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
+                          <div>
+                            <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '4px' }}>
+                              {it.products?.title || 'Product'}
+                            </p>
+                            <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
+                              Qty: {it.quantity} · {it.orders?.created_at ? new Date(it.orders.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>
+                              ₹{Number(it.seller_amount || 0).toLocaleString()}
+                            </p>
+                            <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: it.orders?.payment_method === 'cod' ? '#fef5e7' : '#f0fdf4', color: it.orders?.payment_method === 'cod' ? '#92400e' : '#15803d', border: `1px solid ${it.orders?.payment_method === 'cod' ? '#fcd34d' : '#86efac'}` }}>
+                              {it.orders?.payment_method === 'cod' ? 'COD' : 'PAID ONLINE'}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Shipping address for this seller to pack/ship */}
+                        <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '3px', padding: '12px 14px' }}>
+                          <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '6px', fontFamily: S.sans }}>SHIP TO</p>
+                          <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{addr.name || '—'} · {addr.phone || ''}</p>
+                          <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
+                            {[addr.address, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
