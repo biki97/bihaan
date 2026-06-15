@@ -13,6 +13,43 @@ const S = {
 
 const ADMIN_EMAIL = 'bikidutta319@gmail.com'
 
+// ── CSV helpers ──
+// Safely quote a value so commas/quotes/newlines inside don't break the CSV.
+function csvCell(value) {
+  const s = (value === null || value === undefined) ? '' : String(value)
+  // Escape double-quotes by doubling them, then wrap the whole cell in quotes
+  return `"${s.replace(/"/g, '""')}"`
+}
+
+// Turn an array of row-objects into a CSV string and trigger a browser download.
+function downloadCSV(filename, headers, rows) {
+  const headerLine = headers.map(h => csvCell(h.label)).join(',')
+  const dataLines  = rows.map(row =>
+    headers.map(h => csvCell(h.value(row))).join(',')
+  )
+  const csv = [headerLine, ...dataLines].join('\n')
+
+  // Prepend BOM so Excel reads ₹ and other UTF-8 characters correctly
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// Parse the shipping_address JSON safely (it's stored as a JSON string)
+function parseAddress(raw) {
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+  } catch {
+    return {}
+  }
+}
+
 export default function AdminDashboard() {
   const navigate        = useNavigate()
   const { user }        = useAuth()
@@ -79,6 +116,59 @@ export default function AdminDashboard() {
       .in('id', itemIds)
     await loadData()
     setSavingId(null)
+  }
+
+  // ── CSV download handlers ──
+  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD for filenames
+
+  function downloadOrders() {
+    if (orders.length === 0) { alert('No orders to download'); return }
+    downloadCSV(`bihaan-orders-${today}.csv`,
+      [
+        { label: 'Order ID',       value: o => o.id },
+        { label: 'Date',           value: o => new Date(o.created_at).toLocaleString('en-IN') },
+        { label: 'Status',         value: o => o.status },
+        { label: 'Payment Method', value: o => o.payment_method || 'online' },
+        { label: 'Total (₹)',      value: o => o.total_amount },
+        { label: 'Buyer Name',     value: o => parseAddress(o.shipping_address).name },
+        { label: 'Phone',          value: o => parseAddress(o.shipping_address).phone },
+        { label: 'Address',        value: o => parseAddress(o.shipping_address).address },
+        { label: 'City',           value: o => parseAddress(o.shipping_address).city },
+        { label: 'State',          value: o => parseAddress(o.shipping_address).state },
+        { label: 'Pincode',        value: o => parseAddress(o.shipping_address).pincode },
+      ],
+      orders
+    )
+  }
+
+  function downloadPayouts() {
+    if (payoutList.length === 0) { alert('No payouts to download'); return }
+    downloadCSV(`bihaan-payouts-${today}.csv`,
+      [
+        { label: 'Shop',                value: g => g.shopName },
+        { label: 'Email',               value: g => g.email },
+        { label: 'Items',               value: g => g.itemCount },
+        { label: 'Pending Payout (₹)',  value: g => Math.round(g.pendingAmount) },
+        { label: 'COD Uncollected (₹)', value: g => Math.round(g.codPendingAmount) },
+        { label: 'Already Paid (₹)',    value: g => Math.round(g.paidAmount) },
+      ],
+      payoutList
+    )
+  }
+
+  function downloadSellers() {
+    if (sellers.length === 0) { alert('No sellers to download'); return }
+    downloadCSV(`bihaan-sellers-${today}.csv`,
+      [
+        { label: 'Shop Name', value: s => s.shop_name },
+        { label: 'Email',     value: s => s.profiles?.email },
+        { label: 'State',     value: s => s.state },
+        { label: 'District',  value: s => s.district },
+        { label: 'Approved',  value: s => s.is_approved ? 'Yes' : 'No' },
+        { label: 'Joined',    value: s => s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN') : '' },
+      ],
+      sellers
+    )
   }
 
   // ── Stats ──
@@ -189,6 +279,12 @@ export default function AdminDashboard() {
         {/* Sellers tab */}
         {tab === 'sellers' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+              <button onClick={downloadSellers}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
+                ⬇ DOWNLOAD CSV
+              </button>
+            </div>
             {sellers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No sellers yet</p>
@@ -235,6 +331,12 @@ export default function AdminDashboard() {
         {/* Orders tab */}
         {tab === 'orders' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+              <button onClick={downloadOrders}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
+                ⬇ DOWNLOAD ORDERS + ADDRESSES (CSV)
+              </button>
+            </div>
             {orders.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No orders yet</p>
@@ -275,6 +377,13 @@ export default function AdminDashboard() {
         {/* Payouts tab */}
         {tab === 'payouts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+              <button onClick={downloadPayouts}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
+                ⬇ DOWNLOAD PAYOUTS (CSV)
+              </button>
+            </div>
 
             {/* Summary line */}
             <div style={{ background: '#fef9f7', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '16px 20px', borderRadius: '3px', marginBottom: '8px' }}>
