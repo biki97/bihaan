@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Logo from '../../components/Logo'
+import ExportBar, { printTable, filterByDate } from '../../components/ExportBar'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -53,6 +54,22 @@ function parseAddress(raw) {
     return {}
   }
 }
+
+// ── Column definitions for this seller's orders (shared by CSV + print) ──
+const MY_ORDER_HEADERS = [
+  { label: 'Order Date',       value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
+  { label: 'Product',          value: it => it.products?.title },
+  { label: 'Qty',              value: it => it.quantity },
+  { label: 'Your Earning (₹)', value: it => it.seller_amount },
+  { label: 'Status',           value: it => it.orders?.status },
+  { label: 'Payment',          value: it => it.orders?.payment_method || 'online' },
+  { label: 'Buyer Name',       value: it => parseAddress(it.orders?.shipping_address).name },
+  { label: 'Phone',            value: it => parseAddress(it.orders?.shipping_address).phone },
+  { label: 'Address',          value: it => parseAddress(it.orders?.shipping_address).address },
+  { label: 'City',             value: it => parseAddress(it.orders?.shipping_address).city },
+  { label: 'State',            value: it => parseAddress(it.orders?.shipping_address).state },
+  { label: 'Pincode',          value: it => parseAddress(it.orders?.shipping_address).pincode },
+]
 
 // ── Cloudinary upload ──
 async function uploadToCloudinary(file) {
@@ -147,6 +164,10 @@ export default function SellerDashboard() {
   const [uploadedImages, setUploadedImages] = useState([])
   const [uploadingImages, setUploadingImages] = useState(false)
 
+  // Date-range filter for the Orders tab
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
+
   const [aiInputs, setAiInputs] = useState({
     artisanName: '', village: '', state: '',
     experience: '', productName: '', category: '',
@@ -191,27 +212,20 @@ export default function SellerDashboard() {
     setLoading(false)
   }
 
-  // ── Download THIS seller's orders + buyer addresses ──
+  // ── Date-range filtering — applies to the order list, the CSV, AND the print view ──
+  const filteredOrders = filterByDate(orders, it => it.orders?.created_at, dateFrom, dateTo)
+  const rangeLabel = (dateFrom || dateTo)
+    ? `Date range: ${dateFrom || 'beginning'} → ${dateTo || 'today'}`
+    : 'All dates'
+
+  // ── Download / print THIS seller's orders + buyer addresses ──
   function downloadMyOrders() {
-    if (orders.length === 0) { alert('No orders to download yet'); return }
+    if (filteredOrders.length === 0) { alert('No orders in this date range'); return }
     const today = new Date().toISOString().slice(0, 10)
-    downloadCSV(`my-orders-${today}.csv`,
-      [
-        { label: 'Order Date',    value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
-        { label: 'Product',       value: it => it.products?.title },
-        { label: 'Qty',           value: it => it.quantity },
-        { label: 'Your Earning (₹)', value: it => it.seller_amount },
-        { label: 'Status',        value: it => it.orders?.status },
-        { label: 'Payment',       value: it => it.orders?.payment_method || 'online' },
-        { label: 'Buyer Name',    value: it => parseAddress(it.orders?.shipping_address).name },
-        { label: 'Phone',         value: it => parseAddress(it.orders?.shipping_address).phone },
-        { label: 'Address',       value: it => parseAddress(it.orders?.shipping_address).address },
-        { label: 'City',          value: it => parseAddress(it.orders?.shipping_address).city },
-        { label: 'State',         value: it => parseAddress(it.orders?.shipping_address).state },
-        { label: 'Pincode',       value: it => parseAddress(it.orders?.shipping_address).pincode },
-      ],
-      orders
-    )
+    downloadCSV(`my-orders-${today}.csv`, MY_ORDER_HEADERS, filteredOrders)
+  }
+  function printMyOrders() {
+    printTable('My Orders — Bihaan', MY_ORDER_HEADERS, filteredOrders, rangeLabel)
   }
 
   // ── Handle image upload ──
@@ -626,7 +640,7 @@ export default function SellerDashboard() {
           </div>
         )}
 
-        {/* Orders tab — now shows real orders + download */}
+        {/* Orders tab — real orders + date filter + download + print */}
         {tab === 'orders' && (
           <div>
             {orders.length === 0 ? (
@@ -636,51 +650,58 @@ export default function SellerDashboard() {
               </div>
             ) : (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
-                    {orders.length} order item{orders.length > 1 ? 's' : ''} for your products
-                  </p>
-                  <button onClick={downloadMyOrders}
-                    style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
-                    ⬇ DOWNLOAD ORDERS + ADDRESSES (CSV)
-                  </button>
-                </div>
+                <ExportBar
+                  from={dateFrom} setFrom={setDateFrom}
+                  to={dateTo}     setTo={setDateTo}
+                  onDownload={downloadMyOrders} onPrint={printMyOrders}
+                  count={filteredOrders.length} total={orders.length}
+                  downloadLabel="DOWNLOAD CSV"
+                />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {orders.map(it => {
-                    const addr = parseAddress(it.orders?.shipping_address)
-                    return (
-                      <div key={it.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
-                          <div>
-                            <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '4px' }}>
-                              {it.products?.title || 'Product'}
-                            </p>
-                            <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
-                              Qty: {it.quantity} · {it.orders?.created_at ? new Date(it.orders.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                {filteredOrders.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                    <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>No orders in this date range</p>
+                    <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '6px' }}>
+                      Adjust the dates above or click CLEAR to see everything.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {filteredOrders.map(it => {
+                      const addr = parseAddress(it.orders?.shipping_address)
+                      return (
+                        <div key={it.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
+                            <div>
+                              <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '4px' }}>
+                                {it.products?.title || 'Product'}
+                              </p>
+                              <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
+                                Qty: {it.quantity} · {it.orders?.created_at ? new Date(it.orders.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                              </p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>
+                                ₹{Number(it.seller_amount || 0).toLocaleString()}
+                              </p>
+                              <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: it.orders?.payment_method === 'cod' ? '#fef5e7' : '#f0fdf4', color: it.orders?.payment_method === 'cod' ? '#92400e' : '#15803d', border: `1px solid ${it.orders?.payment_method === 'cod' ? '#fcd34d' : '#86efac'}` }}>
+                                {it.orders?.payment_method === 'cod' ? 'COD' : 'PAID ONLINE'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Shipping address for this seller to pack/ship */}
+                          <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '3px', padding: '12px 14px' }}>
+                            <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '6px', fontFamily: S.sans }}>SHIP TO</p>
+                            <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{addr.name || '—'} · {addr.phone || ''}</p>
+                            <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
+                              {[addr.address, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
                             </p>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>
-                              ₹{Number(it.seller_amount || 0).toLocaleString()}
-                            </p>
-                            <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: it.orders?.payment_method === 'cod' ? '#fef5e7' : '#f0fdf4', color: it.orders?.payment_method === 'cod' ? '#92400e' : '#15803d', border: `1px solid ${it.orders?.payment_method === 'cod' ? '#fcd34d' : '#86efac'}` }}>
-                              {it.orders?.payment_method === 'cod' ? 'COD' : 'PAID ONLINE'}
-                            </span>
-                          </div>
                         </div>
-                        {/* Shipping address for this seller to pack/ship */}
-                        <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '3px', padding: '12px 14px' }}>
-                          <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '6px', fontFamily: S.sans }}>SHIP TO</p>
-                          <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{addr.name || '—'} · {addr.phone || ''}</p>
-                          <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
-                            {[addr.address, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>

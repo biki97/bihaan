@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Logo from '../../components/Logo'
+import ExportBar, { printTable, filterByDate } from '../../components/ExportBar'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -50,6 +51,39 @@ function parseAddress(raw) {
   }
 }
 
+// ── Column definitions (shared by CSV download AND print) ──
+const ORDER_HEADERS = [
+  { label: 'Order ID',       value: o => o.id },
+  { label: 'Date',           value: o => new Date(o.created_at).toLocaleString('en-IN') },
+  { label: 'Status',         value: o => o.status },
+  { label: 'Payment Method', value: o => o.payment_method || 'online' },
+  { label: 'Total (₹)',      value: o => o.total_amount },
+  { label: 'Buyer Name',     value: o => parseAddress(o.shipping_address).name },
+  { label: 'Phone',          value: o => parseAddress(o.shipping_address).phone },
+  { label: 'Address',        value: o => parseAddress(o.shipping_address).address },
+  { label: 'City',           value: o => parseAddress(o.shipping_address).city },
+  { label: 'State',          value: o => parseAddress(o.shipping_address).state },
+  { label: 'Pincode',        value: o => parseAddress(o.shipping_address).pincode },
+]
+
+const PAYOUT_HEADERS = [
+  { label: 'Shop',                value: g => g.shopName },
+  { label: 'Email',               value: g => g.email },
+  { label: 'Items',               value: g => g.itemCount },
+  { label: 'Pending Payout (₹)',  value: g => Math.round(g.pendingAmount) },
+  { label: 'COD Uncollected (₹)', value: g => Math.round(g.codPendingAmount) },
+  { label: 'Already Paid (₹)',    value: g => Math.round(g.paidAmount) },
+]
+
+const SELLER_HEADERS = [
+  { label: 'Shop Name', value: s => s.shop_name },
+  { label: 'Email',     value: s => s.profiles?.email },
+  { label: 'State',     value: s => s.state },
+  { label: 'District',  value: s => s.district },
+  { label: 'Approved',  value: s => s.is_approved ? 'Yes' : 'No' },
+  { label: 'Joined',    value: s => s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN') : '' },
+]
+
 export default function AdminDashboard() {
   const navigate        = useNavigate()
   const { user }        = useAuth()
@@ -59,6 +93,10 @@ export default function AdminDashboard() {
   const [items,    setItems]    = useState([])   // order_items joined with seller + product
   const [loading,  setLoading]  = useState(true)
   const [savingId, setSavingId] = useState(null)
+
+  // Date-range filter (shared across all three tabs)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo,   setDateTo]   = useState('')
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -80,6 +118,7 @@ export default function AdminDashboard() {
       .order('created_at', { ascending: false })
 
     // Pull every order_item, plus the seller's shop/email and the product title.
+    // created_at on the joined order lets us date-filter payouts too.
     // If seller_id is null on a row, the seller join just comes back null — handled below.
     const { data: itemsData } = await supabase
       .from('order_items')
@@ -87,7 +126,7 @@ export default function AdminDashboard() {
         *,
         products ( title ),
         sellers ( shop_name, profiles ( email ) ),
-        orders ( status, payment_method )
+        orders ( status, payment_method, created_at )
       `)
       .order('id', { ascending: false })
 
@@ -118,67 +157,51 @@ export default function AdminDashboard() {
     setSavingId(null)
   }
 
-  // ── CSV download handlers ──
+  // ── Date-range filtering — applies to the lists, the CSV, AND the print view ──
+  const filteredOrders  = filterByDate(orders,  o  => o.created_at,         dateFrom, dateTo)
+  const filteredSellers = filterByDate(sellers, s  => s.created_at,         dateFrom, dateTo)
+  const filteredItems   = filterByDate(items,   it => it.orders?.created_at, dateFrom, dateTo)
+
+  const rangeLabel = (dateFrom || dateTo)
+    ? `Date range: ${dateFrom || 'beginning'} → ${dateTo || 'today'}`
+    : 'All dates'
+
+  // ── Download + print handlers ──
   const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD for filenames
 
   function downloadOrders() {
-    if (orders.length === 0) { alert('No orders to download'); return }
-    downloadCSV(`bihaan-orders-${today}.csv`,
-      [
-        { label: 'Order ID',       value: o => o.id },
-        { label: 'Date',           value: o => new Date(o.created_at).toLocaleString('en-IN') },
-        { label: 'Status',         value: o => o.status },
-        { label: 'Payment Method', value: o => o.payment_method || 'online' },
-        { label: 'Total (₹)',      value: o => o.total_amount },
-        { label: 'Buyer Name',     value: o => parseAddress(o.shipping_address).name },
-        { label: 'Phone',          value: o => parseAddress(o.shipping_address).phone },
-        { label: 'Address',        value: o => parseAddress(o.shipping_address).address },
-        { label: 'City',           value: o => parseAddress(o.shipping_address).city },
-        { label: 'State',          value: o => parseAddress(o.shipping_address).state },
-        { label: 'Pincode',        value: o => parseAddress(o.shipping_address).pincode },
-      ],
-      orders
-    )
+    if (filteredOrders.length === 0) { alert('No orders in this date range'); return }
+    downloadCSV(`bihaan-orders-${today}.csv`, ORDER_HEADERS, filteredOrders)
+  }
+  function printOrders() {
+    printTable('Bihaan — Orders', ORDER_HEADERS, filteredOrders, rangeLabel)
   }
 
   function downloadPayouts() {
-    if (payoutList.length === 0) { alert('No payouts to download'); return }
-    downloadCSV(`bihaan-payouts-${today}.csv`,
-      [
-        { label: 'Shop',                value: g => g.shopName },
-        { label: 'Email',               value: g => g.email },
-        { label: 'Items',               value: g => g.itemCount },
-        { label: 'Pending Payout (₹)',  value: g => Math.round(g.pendingAmount) },
-        { label: 'COD Uncollected (₹)', value: g => Math.round(g.codPendingAmount) },
-        { label: 'Already Paid (₹)',    value: g => Math.round(g.paidAmount) },
-      ],
-      payoutList
-    )
+    if (payoutList.length === 0) { alert('No payouts in this date range'); return }
+    downloadCSV(`bihaan-payouts-${today}.csv`, PAYOUT_HEADERS, payoutList)
+  }
+  function printPayouts() {
+    printTable('Bihaan — Seller Payouts', PAYOUT_HEADERS, payoutList, rangeLabel)
   }
 
   function downloadSellers() {
-    if (sellers.length === 0) { alert('No sellers to download'); return }
-    downloadCSV(`bihaan-sellers-${today}.csv`,
-      [
-        { label: 'Shop Name', value: s => s.shop_name },
-        { label: 'Email',     value: s => s.profiles?.email },
-        { label: 'State',     value: s => s.state },
-        { label: 'District',  value: s => s.district },
-        { label: 'Approved',  value: s => s.is_approved ? 'Yes' : 'No' },
-        { label: 'Joined',    value: s => s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN') : '' },
-      ],
-      sellers
-    )
+    if (filteredSellers.length === 0) { alert('No sellers in this date range'); return }
+    downloadCSV(`bihaan-sellers-${today}.csv`, SELLER_HEADERS, filteredSellers)
+  }
+  function printSellers() {
+    printTable('Bihaan — Sellers', SELLER_HEADERS, filteredSellers, rangeLabel)
   }
 
-  // ── Stats ──
+  // ── Stats (always all-time, regardless of the date filter) ──
   const totalRevenue   = orders.reduce((s, o) => s + (Number(o.total_amount) * 0.1), 0)
   const pendingSellers = sellers.filter(s => !s.is_approved).length
 
   // ── Group order_items by seller, splitting pending vs paid ──
+  // Built from filteredItems so the date range flows through to payouts too.
   // COD orders not yet collected are tracked separately so you don't pay before cash arrives.
   const payoutGroups = {}
-  for (const it of items) {
+  for (const it of filteredItems) {
     const key      = it.seller_id || 'unassigned'
     const shopName = it.sellers?.shop_name || (it.seller_id ? 'Unknown shop' : 'Unassigned seller')
     const email    = it.sellers?.profiles?.email || '—'
@@ -211,9 +234,22 @@ export default function AdminDashboard() {
 
   const totalPending = payoutList.reduce((s, g) => s + g.pendingAmount, 0)
 
+  // How many seller groups exist before the date filter (for the "X of Y" label)
+  const totalPayoutGroups = new Set(items.map(it => it.seller_id || 'unassigned')).size
+
   if (loading) return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: S.muted, fontFamily: S.sans }}>Loading admin panel...</p>
+    </div>
+  )
+
+  // Small reusable "nothing matched the filter" block
+  const noneInRange = (label) => (
+    <div style={{ textAlign: 'center', padding: '48px 0' }}>
+      <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>No {label} in this date range</p>
+      <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '6px' }}>
+        Adjust the dates above or click CLEAR to see everything.
+      </p>
     </div>
   )
 
@@ -279,17 +315,18 @@ export default function AdminDashboard() {
         {/* Sellers tab */}
         {tab === 'sellers' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
-              <button onClick={downloadSellers}
-                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
-                ⬇ DOWNLOAD CSV
-              </button>
-            </div>
+            <ExportBar
+              from={dateFrom} setFrom={setDateFrom}
+              to={dateTo}     setTo={setDateTo}
+              onDownload={downloadSellers} onPrint={printSellers}
+              count={filteredSellers.length} total={sellers.length}
+              downloadLabel="DOWNLOAD CSV"
+            />
             {sellers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No sellers yet</p>
               </div>
-            ) : sellers.map(seller => (
+            ) : filteredSellers.length === 0 ? noneInRange('sellers') : filteredSellers.map(seller => (
               <div key={seller.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'center' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
@@ -331,17 +368,18 @@ export default function AdminDashboard() {
         {/* Orders tab */}
         {tab === 'orders' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
-              <button onClick={downloadOrders}
-                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
-                ⬇ DOWNLOAD ORDERS + ADDRESSES (CSV)
-              </button>
-            </div>
+            <ExportBar
+              from={dateFrom} setFrom={setDateFrom}
+              to={dateTo}     setTo={setDateTo}
+              onDownload={downloadOrders} onPrint={printOrders}
+              count={filteredOrders.length} total={orders.length}
+              downloadLabel="DOWNLOAD CSV"
+            />
             {orders.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No orders yet</p>
               </div>
-            ) : orders.map(order => (
+            ) : filteredOrders.length === 0 ? noneInRange('orders') : filteredOrders.map(order => (
               <div key={order.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px', display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
@@ -378,29 +416,31 @@ export default function AdminDashboard() {
         {tab === 'payouts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
-              <button onClick={downloadPayouts}
-                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.dark, background: S.white, border: `1px solid ${S.border}`, padding: '8px 16px', cursor: 'pointer', fontFamily: S.sans }}>
-                ⬇ DOWNLOAD PAYOUTS (CSV)
-              </button>
-            </div>
+            <ExportBar
+              from={dateFrom} setFrom={setDateFrom}
+              to={dateTo}     setTo={setDateTo}
+              onDownload={downloadPayouts} onPrint={printPayouts}
+              count={payoutList.length} total={totalPayoutGroups}
+              downloadLabel="DOWNLOAD CSV"
+            />
 
             {/* Summary line */}
             <div style={{ background: '#fef9f7', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '16px 20px', borderRadius: '3px', marginBottom: '8px' }}>
               <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
                 You owe sellers a total of <strong>₹{Math.round(totalPending).toLocaleString()}</strong> across {payoutList.filter(g => g.pendingAmount > 0).length} seller(s).
+                {(dateFrom || dateTo) && <span style={{ color: S.muted }}> ({rangeLabel})</span>}{' '}
                 Pay them by UPI/bank transfer, then mark as paid here.
               </p>
             </div>
 
-            {payoutList.length === 0 ? (
+            {items.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No payouts yet</p>
                 <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '6px' }}>
                   Seller payout records appear here once orders come in.
                 </p>
               </div>
-            ) : payoutList.map(g => (
+            ) : payoutList.length === 0 ? noneInRange('payouts') : payoutList.map(g => (
               <div key={g.key} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'center' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
