@@ -38,7 +38,7 @@ const EMPTY_ADDR = { label: 'Home', name: '', phone: '', address: '', city: '', 
 export default function Account() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
-  const { user, signOut } = useAuth()
+  const { user, loading: authLoading, signOut } = useAuth()
   const { formatPrice } = useCurrency()
 
   const [searchParams] = useSearchParams()
@@ -62,11 +62,12 @@ export default function Account() {
   const [savingProfile, setSavingProfile] = useState(false)
 
   useEffect(() => {
+    if (authLoading) return                   // auth still restoring on refresh — wait
     if (!user) { navigate('/login'); return }
     loadOrders()
     loadAddresses()
     loadProfile()
-  }, [user])
+  }, [user, authLoading])
 
   async function loadProfile() {
     const { data } = await supabase

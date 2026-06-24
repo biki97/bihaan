@@ -45,6 +45,10 @@ export default function SellerRegister() {
     state:        '',
     district:     '',
     phone:        '',
+    // KYC (stored in the locked-down seller_kyc table, never in public sellers)
+    legal_name:   '',
+    pan_number:   '',
+    gst_number:   '',
     bank_account: '',
     ifsc_code:    '',
   })
@@ -123,21 +127,46 @@ export default function SellerRegister() {
   // ── FINAL SUBMIT ──
   async function handleSubmit() {
     if (!user) { navigate('/login'); return }
+
+    // Validate KYC
+    if (!form.legal_name || !form.pan_number || !form.bank_account || !form.ifsc_code) {
+      setError('Please fill in legal name, PAN, bank account and IFSC.')
+      return
+    }
+    const pan = form.pan_number.toUpperCase().trim()
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      setError('Please enter a valid PAN number (e.g. ABCDE1234F).')
+      return
+    }
+    const gst = form.gst_number.toUpperCase().trim()
+
     setLoading(true)
     setError('')
     try {
       await supabase.from('profiles').upsert({ id: user.id, email: user.email, role: 'seller' })
-      const { error } = await supabase.from('sellers').insert({
-        user_id:      user.id,
-        shop_name:    form.shop_name,
-        description:  form.description,
-        state:        form.state,
-        district:     form.district,
-        is_approved:  false,
-        bank_account: form.bank_account,
-        ifsc_code:    form.ifsc_code,
+
+      // Public, non-sensitive shop info → sellers
+      const { error: sErr } = await supabase.from('sellers').insert({
+        user_id:     user.id,
+        shop_name:   form.shop_name,
+        description: form.description,
+        state:       form.state,
+        district:    form.district,
+        is_approved: false,
       })
-      if (error) throw error
+      if (sErr) throw sErr
+
+      // Sensitive KYC → locked-down seller_kyc (only seller + admin can read)
+      const { error: kErr } = await supabase.from('seller_kyc').upsert({
+        user_id:      user.id,
+        legal_name:   form.legal_name,
+        pan_number:   pan,
+        gst_number:   gst || null,
+        bank_account: form.bank_account,
+        ifsc_code:    form.ifsc_code.toUpperCase().trim(),
+      })
+      if (kErr) throw kErr
+
       navigate('/seller/dashboard')
     } catch (err) {
       setError(err.message)
@@ -145,6 +174,9 @@ export default function SellerRegister() {
       setLoading(false)
     }
   }
+
+  const inputStyle = { width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }
+  const labelStyle = { fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }
 
   return (
     <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
@@ -194,7 +226,7 @@ export default function SellerRegister() {
 
         {/* Step labels */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginBottom: '36px' }}>
-          {['Account', 'Shop details', 'Location', 'Bank details'].map((label, i) => (
+          {['Account', 'Shop details', 'Location', 'Verification'].map((label, i) => (
             <p key={label} style={{ fontSize: '10px', letterSpacing: '.08em', color: step === i ? S.accent : S.muted, fontFamily: S.sans }}>
               {label.toUpperCase()}
             </p>
@@ -228,22 +260,16 @@ export default function SellerRegister() {
               {authTab === 'email' && (
                 <>
                   <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>FULL NAME *</label>
-                    <input name="full_name" value={form.full_name} onChange={handleChange}
-                      placeholder="Your full name"
-                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                    <label style={labelStyle}>FULL NAME *</label>
+                    <input name="full_name" value={form.full_name} onChange={handleChange} placeholder="Your full name" style={inputStyle} />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>EMAIL ADDRESS *</label>
-                    <input name="email" value={form.email} onChange={handleChange}
-                      placeholder="you@example.com"
-                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                    <label style={labelStyle}>EMAIL ADDRESS *</label>
+                    <input name="email" value={form.email} onChange={handleChange} placeholder="you@example.com" style={inputStyle} />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PASSWORD *</label>
-                    <input type="password" name="password" value={form.password} onChange={handleChange}
-                      placeholder="Minimum 6 characters"
-                      style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                    <label style={labelStyle}>PASSWORD *</label>
+                    <input type="password" name="password" value={form.password} onChange={handleChange} placeholder="Minimum 6 characters" style={inputStyle} />
                   </div>
                   {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '3px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
                   <button onClick={handleEmailSignup} disabled={loading}
@@ -259,7 +285,7 @@ export default function SellerRegister() {
                   {!otpSent ? (
                     <>
                       <div>
-                        <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>MOBILE NUMBER *</label>
+                        <label style={labelStyle}>MOBILE NUMBER *</label>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <div style={{ padding: '11px 14px', border: `1px solid ${S.border}`, background: '#f0e8e4', fontSize: '14px', color: S.dark, fontFamily: S.sans, whiteSpace: 'nowrap' }}>
                             🇮🇳 +91
@@ -287,7 +313,7 @@ export default function SellerRegister() {
                         <p style={{ fontSize: '13px', color: '#15803d', fontFamily: S.sans }}>✓ OTP sent to +91{phone}</p>
                       </div>
                       <div>
-                        <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>ENTER 6-DIGIT OTP *</label>
+                        <label style={labelStyle}>ENTER 6-DIGIT OTP *</label>
                         <input
                           type="text"
                           value={otp}
@@ -326,31 +352,25 @@ export default function SellerRegister() {
                 Tell us about your shop
               </h2>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>SHOP NAME *</label>
-                <input name="shop_name" value={form.shop_name} onChange={handleChange}
-                  placeholder="e.g. Rekha's Muga Silk"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                <label style={labelStyle}>SHOP NAME *</label>
+                <input name="shop_name" value={form.shop_name} onChange={handleChange} placeholder="e.g. Rekha's Muga Silk" style={inputStyle} />
               </div>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>WHAT DO YOU MAKE? *</label>
+                <label style={labelStyle}>WHAT DO YOU MAKE? *</label>
                 <textarea name="description" value={form.description} onChange={handleChange}
-                  placeholder="Describe your craft in a few sentences..."
-                  rows={4}
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
+                  placeholder="Describe your craft in a few sentences..." rows={4}
+                  style={{ ...inputStyle, resize: 'vertical' }} />
               </div>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PRODUCT CATEGORY *</label>
-                <select name="category" value={form.category} onChange={handleChange}
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                <label style={labelStyle}>PRODUCT CATEGORY *</label>
+                <select name="category" value={form.category} onChange={handleChange} style={inputStyle}>
                   <option value="">Select a category</option>
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>PHONE NUMBER *</label>
-                <input name="phone" value={form.phone} onChange={handleChange}
-                  placeholder="+91 XXXXX XXXXX"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                <label style={labelStyle}>PHONE NUMBER *</label>
+                <input name="phone" value={form.phone} onChange={handleChange} placeholder="+91 XXXXX XXXXX" style={inputStyle} />
               </div>
               {error && <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>}
               <button onClick={() => {
@@ -370,18 +390,15 @@ export default function SellerRegister() {
                 Where are you based?
               </h2>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>STATE *</label>
-                <select name="state" value={form.state} onChange={handleChange}
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }}>
+                <label style={labelStyle}>STATE *</label>
+                <select name="state" value={form.state} onChange={handleChange} style={inputStyle}>
                   <option value="">Select your state</option>
                   {states.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>DISTRICT / VILLAGE *</label>
-                <input name="district" value={form.district} onChange={handleChange}
-                  placeholder="e.g. Sualkuchi, Jorhat, Kohima"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                <label style={labelStyle}>DISTRICT / VILLAGE *</label>
+                <input name="district" value={form.district} onChange={handleChange} placeholder="e.g. Sualkuchi, Jorhat, Kohima" style={inputStyle} />
               </div>
               {error && <p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p>}
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -400,32 +417,57 @@ export default function SellerRegister() {
             </div>
           )}
 
-          {/* ── STEP 3 — Bank details ── */}
+          {/* ── STEP 3 — Verification (KYC + payouts) ── */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <h2 style={{ fontFamily: S.serif, fontSize: '1.4rem', fontWeight: 400, color: S.dark, marginBottom: '4px' }}>
-                Bank details for payouts
+                Verification & payout details
               </h2>
               <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '-8px' }}>
-                Your earnings will be transferred here after each sale.
+                Required to verify you and to send your earnings. These details are private.
               </p>
+
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>BANK ACCOUNT NUMBER *</label>
-                <input name="bank_account" value={form.bank_account} onChange={handleChange}
-                  placeholder="Your bank account number"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                <label style={labelStyle}>FULL LEGAL NAME (as on PAN) *</label>
+                <input name="legal_name" value={form.legal_name} onChange={handleChange} placeholder="Name exactly as printed on your PAN card" style={inputStyle} />
               </div>
+
               <div>
-                <label style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, display: 'block', marginBottom: '6px', fontFamily: S.sans }}>IFSC CODE *</label>
-                <input name="ifsc_code" value={form.ifsc_code} onChange={handleChange}
-                  placeholder="e.g. SBIN0001234"
-                  style={{ width: '100%', padding: '11px 14px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans }} />
+                <label style={labelStyle}>PAN NUMBER *</label>
+                <input name="pan_number" value={form.pan_number}
+                  onChange={e => setForm(prev => ({ ...prev, pan_number: e.target.value.toUpperCase().slice(0, 10) }))}
+                  placeholder="ABCDE1234F" maxLength={10}
+                  style={{ ...inputStyle, letterSpacing: '.1em' }} />
               </div>
-              <div style={{ padding: '12px 14px', background: '#fef5e7', border: '1px solid #f59e0b', borderRadius: '3px' }}>
-                <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, lineHeight: 1.6 }}>
-                  🔒 Your bank details are encrypted and stored securely. Only used for sending your earnings after each sale.
+
+              <div>
+                <label style={labelStyle}>GST NUMBER (optional)</label>
+                <input name="gst_number" value={form.gst_number}
+                  onChange={e => setForm(prev => ({ ...prev, gst_number: e.target.value.toUpperCase().slice(0, 15) }))}
+                  placeholder="Only if you are GST-registered" maxLength={15}
+                  style={{ ...inputStyle, letterSpacing: '.05em' }} />
+                <p style={{ fontSize: '11px', color: S.muted, marginTop: '6px', fontFamily: S.sans }}>
+                  Leave blank if you don't have a GST registration.
                 </p>
               </div>
+
+              <div style={{ borderTop: `1px solid ${S.border}`, paddingTop: '18px' }}>
+                <label style={labelStyle}>BANK ACCOUNT NUMBER *</label>
+                <input name="bank_account" value={form.bank_account} onChange={handleChange} placeholder="Your bank account number" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>IFSC CODE *</label>
+                <input name="ifsc_code" value={form.ifsc_code}
+                  onChange={e => setForm(prev => ({ ...prev, ifsc_code: e.target.value.toUpperCase().slice(0, 11) }))}
+                  placeholder="e.g. SBIN0001234" maxLength={11} style={inputStyle} />
+              </div>
+
+              <div style={{ padding: '12px 14px', background: '#fef5e7', border: '1px solid #f59e0b', borderRadius: '3px' }}>
+                <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, lineHeight: 1.6 }}>
+                  🔒 Your PAN, GST and bank details are private — visible only to you and the Bihaan team, and used only for verification and sending your payouts.
+                </p>
+              </div>
+
               {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px' }}><p style={{ fontSize: '13px', color: '#b91c1c', fontFamily: S.sans }}>{error}</p></div>}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => setStep(2)}
