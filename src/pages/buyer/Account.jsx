@@ -1,10 +1,9 @@
 // src/pages/buyer/Account.jsx
 //
-// Buyer account hub. Add a route for it, e.g. in your router:
-//   <Route path="/account" element={<Account />} />
-//
-// Requires the RLS policy "buyers view own order items" (see chat) so the
-// Orders tab can read the line items of the buyer's own orders.
+// Buyer account hub: My Orders, Saved Addresses (full add/edit/delete/default),
+// My Profile. Requires:
+//   - RLS policy "buyers view own order items" (orders tab)
+//   - the public.addresses table + its RLS policies (addresses tab)
 
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useState, useEffect } from 'react'
@@ -34,6 +33,8 @@ function statusStyle(status) {
   return { bg: '#f3f0eb', color: S.muted, border: S.border }
 }
 
+const EMPTY_ADDR = { name: '', phone: '', address: '', city: '', state: '', pincode: '' }
+
 export default function Account() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
@@ -43,13 +44,53 @@ export default function Account() {
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
   const [section, setSection] = useState(['orders','addresses','profile'].includes(initialTab) ? initialTab : 'orders')
+
   const [orders,  setOrders]  = useState([])
   const [loading, setLoading] = useState(true)
+
+  // Address book state
+  const [addresses,    setAddresses]    = useState([])
+  const [addrForm,     setAddrForm]     = useState(EMPTY_ADDR)
+  const [editingId,    setEditingId]    = useState(null)   // null = not editing; 'new' = adding; else address id
+  const [savingAddr,   setSavingAddr]   = useState(false)
+
+  // Profile state
+  const [profileForm,    setProfileForm]    = useState({ full_name: '', phone: '' })
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [savingProfile,  setSavingProfile]  = useState(false)
+  const [profileSaved,   setProfileSaved]   = useState(false)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
     loadOrders()
+    loadAddresses()
+    loadProfile()
   }, [user])
+
+  async function loadProfile() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('full_name, phone')
+      .eq('id', user.id)
+      .single()
+    if (data) setProfileForm({ full_name: data.full_name || '', phone: data.phone || '' })
+  }
+
+  async function saveProfile() {
+    setSavingProfile(true)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: profileForm.full_name, phone: profileForm.phone })
+        .eq('id', user.id)
+      if (error) { alert('Could not save profile. Please try again.'); return }
+      setEditingProfile(false)
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 2500)
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   async function loadOrders() {
     setLoading(true)
@@ -68,28 +109,78 @@ export default function Account() {
     setLoading(false)
   }
 
-  // Addresses the buyer has used before (de-duplicated from past orders)
-  const savedAddresses = (() => {
-    const seen = new Set()
-    const list = []
-    for (const o of orders) {
-      const a = parseAddress(o.shipping_address)
-      const key = [a.name, a.phone, a.address, a.city, a.pincode].join('|')
-      if (a.address && !seen.has(key)) { seen.add(key); list.push(a) }
+  async function loadAddresses() {
+    const { data } = await supabase
+      .from('addresses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: false })
+    setAddresses(data || [])
+  }
+
+  function startAdd() {
+    setAddrForm(EMPTY_ADDR)
+    setEditingId('new')
+  }
+  function startEdit(a) {
+    setAddrForm({ name: a.name || '', phone: a.phone || '', address: a.address || '', city: a.city || '', state: a.state || '', pincode: a.pincode || '' })
+    setEditingId(a.id)
+  }
+  function cancelEdit() {
+    setEditingId(null)
+    setAddrForm(EMPTY_ADDR)
+  }
+
+  async function saveAddress() {
+    if (!addrForm.name || !addrForm.phone || !addrForm.address || !addrForm.city || !addrForm.pincode) {
+      alert('Please fill in name, phone, address, city and pincode.')
+      return
     }
-    return list
-  })()
+    setSavingAddr(true)
+    try {
+      if (editingId === 'new') {
+        await supabase.from('addresses').insert({
+          ...addrForm,
+          user_id: user.id,
+          is_default: addresses.length === 0,   // first address becomes default
+        })
+      } else {
+        await supabase.from('addresses').update(addrForm).eq('id', editingId)
+      }
+      cancelEdit()
+      await loadAddresses()
+    } catch (e) {
+      alert('Could not save address. Please try again.')
+    } finally {
+      setSavingAddr(false)
+    }
+  }
+
+  async function deleteAddress(id) {
+    if (!confirm('Delete this address?')) return
+    await supabase.from('addresses').delete().eq('id', id)
+    await loadAddresses()
+  }
+
+  async function setDefault(id) {
+    await supabase.from('addresses').update({ is_default: false }).eq('user_id', user.id)
+    await supabase.from('addresses').update({ is_default: true }).eq('id', id)
+    await loadAddresses()
+  }
 
   const menu = [
-    { id: 'orders',    label: 'My Orders',      icon: '📦' },
+    { id: 'orders',    label: 'My Orders',       icon: '📦' },
     { id: 'addresses', label: 'Saved Addresses', icon: '📍' },
-    { id: 'profile',   label: 'My Profile',     icon: '👤' },
+    { id: 'profile',   label: 'My Profile',      icon: '👤' },
   ]
+
+  const inputStyle = { width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.white, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }
+  const labelStyle = { fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }
 
   return (
     <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
 
-      {/* Top bar */}
       <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
         <button onClick={() => navigate('/products')}
@@ -167,7 +258,6 @@ export default function Account() {
                           </div>
                         </div>
 
-                        {/* Line items */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: `1px solid ${S.border}`, paddingTop: '12px' }}>
                           {(o.order_items || []).map((it, i) => {
                             const img = it.products?.images?.[0]
@@ -196,26 +286,90 @@ export default function Account() {
             {/* ADDRESSES */}
             {section === 'addresses' && (
               <div>
-                {savedAddresses.length === 0 ? (
+                {/* Add button */}
+                {editingId === null && (
+                  <button onClick={startAdd}
+                    style={{ background: S.dark, color: '#fff', padding: '11px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans, marginBottom: '18px' }}>
+                    + ADD NEW ADDRESS
+                  </button>
+                )}
+
+                {/* Add / edit form */}
+                {editingId !== null && (
+                  <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '22px', marginBottom: '18px' }}>
+                    <h3 style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark, marginBottom: '16px' }}>
+                      {editingId === 'new' ? 'Add a new address' : 'Edit address'}
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                      <div>
+                        <label style={labelStyle}>FULL NAME *</label>
+                        <input style={inputStyle} value={addrForm.name} onChange={e => setAddrForm({ ...addrForm, name: e.target.value })} placeholder="Recipient name" />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>PHONE *</label>
+                        <input style={inputStyle} value={addrForm.phone} onChange={e => setAddrForm({ ...addrForm, phone: e.target.value })} placeholder="+91 XXXXX XXXXX" />
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>ADDRESS *</label>
+                      <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={2} value={addrForm.address} onChange={e => setAddrForm({ ...addrForm, address: e.target.value })} placeholder="House no., street, area, landmark" />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '18px' }}>
+                      <div>
+                        <label style={labelStyle}>CITY *</label>
+                        <input style={inputStyle} value={addrForm.city} onChange={e => setAddrForm({ ...addrForm, city: e.target.value })} placeholder="City" />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>STATE</label>
+                        <input style={inputStyle} value={addrForm.state} onChange={e => setAddrForm({ ...addrForm, state: e.target.value })} placeholder="State" />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>PINCODE *</label>
+                        <input style={inputStyle} value={addrForm.pincode} onChange={e => setAddrForm({ ...addrForm, pincode: e.target.value })} placeholder="000000" />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={saveAddress} disabled={savingAddr}
+                        style={{ background: S.accent, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: savingAddr ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                        {savingAddr ? 'SAVING…' : 'SAVE ADDRESS'}
+                      </button>
+                      <button onClick={cancelEdit}
+                        style={{ background: 'transparent', color: S.muted, padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
+                        CANCEL
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Address list */}
+                {addresses.length === 0 && editingId === null ? (
                   <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '24px' }}>
-                    <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
-                      No saved addresses yet. Addresses you use at checkout will appear here.
-                    </p>
+                    <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>No saved addresses yet. Add one above and it'll be ready at checkout.</p>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>Addresses you've used before:</p>
-                    {savedAddresses.map((a, i) => (
-                      <div key={i} style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '16px 18px' }}>
-                        <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, fontWeight: 500 }}>{a.name} · {a.phone}</p>
-                        <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '4px' }}>
-                          {[a.address, a.city, a.state, a.pincode].filter(Boolean).join(', ')}
-                        </p>
+                    {addresses.map(a => (
+                      <div key={a.id} style={{ background: S.white, border: `1px solid ${a.is_default ? S.accent : S.border}`, borderRadius: '4px', padding: '16px 18px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px', flexWrap: 'wrap' }}>
+                          <div>
+                            <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, fontWeight: 500 }}>
+                              {a.name} · {a.phone}
+                              {a.is_default && <span style={{ marginLeft: '10px', fontSize: '9px', letterSpacing: '.08em', color: S.accent, background: '#fef9f7', border: `1px solid ${S.accent}`, padding: '2px 7px' }}>DEFAULT</span>}
+                            </p>
+                            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '5px' }}>
+                              {[a.address, a.city, a.state, a.pincode].filter(Boolean).join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                          {!a.is_default && (
+                            <button onClick={() => setDefault(a.id)} style={{ fontSize: '11px', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>SET AS DEFAULT</button>
+                          )}
+                          <button onClick={() => startEdit(a)} style={{ fontSize: '11px', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>EDIT</button>
+                          <button onClick={() => deleteAddress(a.id)} style={{ fontSize: '11px', color: '#b91c1c', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>DELETE</button>
+                        </div>
                       </div>
                     ))}
-                    <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginTop: '4px' }}>
-                      A full address book (add / edit / set default) can be added next — ask to build it.
-                    </p>
                   </div>
                 )}
               </div>
@@ -223,20 +377,53 @@ export default function Account() {
 
             {/* PROFILE */}
             {section === 'profile' && (
-              <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '24px' }}>
-                <div style={{ marginBottom: '14px' }}>
-                  <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>EMAIL</p>
+              <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '24px', maxWidth: '480px' }}>
+
+                {/* Email (read-only) */}
+                <div style={{ marginBottom: '18px' }}>
+                  <label style={labelStyle}>EMAIL</label>
                   <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{user?.email || '—'}</p>
+                  <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginTop: '2px' }}>Email is linked to your login and can't be changed here.</p>
                 </div>
-                {user?.phone && (
-                  <div style={{ marginBottom: '14px' }}>
-                    <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>PHONE</p>
-                    <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{user.phone}</p>
-                  </div>
+
+                {editingProfile ? (
+                  <>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>FULL NAME</label>
+                      <input style={inputStyle} value={profileForm.full_name} onChange={e => setProfileForm({ ...profileForm, full_name: e.target.value })} placeholder="Your name" />
+                    </div>
+                    <div style={{ marginBottom: '18px' }}>
+                      <label style={labelStyle}>PHONE</label>
+                      <input style={inputStyle} value={profileForm.phone} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="+91 XXXXX XXXXX" />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button onClick={saveProfile} disabled={savingProfile}
+                        style={{ background: S.accent, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: savingProfile ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
+                        {savingProfile ? 'SAVING…' : 'SAVE CHANGES'}
+                      </button>
+                      <button onClick={() => { setEditingProfile(false); loadProfile() }}
+                        style={{ background: 'transparent', color: S.muted, padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
+                        CANCEL
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>FULL NAME</label>
+                      <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{profileForm.full_name || '—'}</p>
+                    </div>
+                    <div style={{ marginBottom: '18px' }}>
+                      <label style={labelStyle}>PHONE</label>
+                      <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{profileForm.phone || '—'}</p>
+                    </div>
+                    <button onClick={() => setEditingProfile(true)}
+                      style={{ background: S.dark, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                      EDIT PROFILE
+                    </button>
+                    {profileSaved && <span style={{ marginLeft: '12px', fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>✓ Saved</span>}
+                  </>
                 )}
-                <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginTop: '8px' }}>
-                  Editable profile (name, phone) can be added next once we confirm your profiles table columns.
-                </p>
               </div>
             )}
 
