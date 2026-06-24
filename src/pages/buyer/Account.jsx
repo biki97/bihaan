@@ -35,15 +35,23 @@ function statusStyle(status) {
 
 const EMPTY_ADDR = { label: 'Home', name: '', phone: '', address: '', city: '', state: '', pincode: '' }
 
+// Show only the last 4 chars of a sensitive value, masking the rest
+function maskTail(value, visible = 4) {
+  if (!value) return '—'
+  const s = String(value)
+  if (s.length <= visible) return s
+  return '•'.repeat(Math.max(4, s.length - visible)) + s.slice(-visible)
+}
+
 export default function Account() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
-  const { user, loading: authLoading, signOut } = useAuth()
+  const { user, role, loading: authLoading, signOut } = useAuth()
   const { formatPrice } = useCurrency()
 
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
-  const [section, setSection] = useState(['orders','addresses','profile'].includes(initialTab) ? initialTab : 'orders')
+  const [section, setSection] = useState(['orders','addresses','profile','payout'].includes(initialTab) ? initialTab : 'orders')
 
   const [orders,  setOrders]  = useState([])
   const [loading, setLoading] = useState(true)
@@ -61,13 +69,56 @@ export default function Account() {
   const [editingPhone,  setEditingPhone]  = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
 
+  // Payout / KYC state (sellers only) — read from locked-down seller_kyc table
+  const [kyc,          setKyc]          = useState(null)
+  const [payoutForm,   setPayoutForm]   = useState({ bank_account: '', ifsc_code: '', gst_number: '' })
+  const [editingPayout,setEditingPayout]= useState(false)
+  const [savingPayout, setSavingPayout] = useState(false)
+  const [payoutSaved,  setPayoutSaved]  = useState(false)
+
+  const isSeller = role === 'seller'
+
   useEffect(() => {
     if (authLoading) return                   // auth still restoring on refresh — wait
     if (!user) { navigate('/login'); return }
     loadOrders()
     loadAddresses()
     loadProfile()
-  }, [user, authLoading])
+    if (isSeller) loadKyc()
+  }, [user, authLoading, isSeller])
+
+  async function loadKyc() {
+    const { data } = await supabase
+      .from('seller_kyc')
+      .select('legal_name, pan_number, gst_number, bank_account, ifsc_code')
+      .eq('user_id', user.id)
+      .single()
+    if (data) {
+      setKyc(data)
+      setPayoutForm({ bank_account: '', ifsc_code: data.ifsc_code || '', gst_number: data.gst_number || '' })
+    }
+  }
+
+  async function savePayout() {
+    // bank_account left blank = keep existing; only update if a new number was typed
+    if (!payoutForm.ifsc_code) { alert('IFSC code is required.'); return }
+    setSavingPayout(true)
+    try {
+      const update = {
+        ifsc_code:  payoutForm.ifsc_code.toUpperCase().trim(),
+        gst_number: payoutForm.gst_number ? payoutForm.gst_number.toUpperCase().trim() : null,
+      }
+      if (payoutForm.bank_account.trim()) update.bank_account = payoutForm.bank_account.trim()
+      const { error } = await supabase.from('seller_kyc').update(update).eq('user_id', user.id)
+      if (error) { alert('Could not save. Please try again.'); return }
+      setEditingPayout(false)
+      setPayoutSaved(true)
+      setTimeout(() => setPayoutSaved(false), 2500)
+      await loadKyc()
+    } finally {
+      setSavingPayout(false)
+    }
+  }
 
   async function loadProfile() {
     const { data } = await supabase
@@ -185,6 +236,7 @@ export default function Account() {
     { id: 'orders',    label: 'My Orders',       icon: '📦' },
     { id: 'addresses', label: 'Saved Addresses', icon: '📍' },
     { id: 'profile',   label: 'My Profile',      icon: '👤' },
+    ...(isSeller ? [{ id: 'payout', label: 'Payout Details', icon: '🏦' }] : []),
   ]
 
   const inputStyle = { width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.white, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }
@@ -474,6 +526,82 @@ export default function Account() {
                   )}
                 </div>
 
+              </div>
+            )}
+
+            {/* PAYOUT DETAILS (sellers only) */}
+            {section === 'payout' && isSeller && (
+              <div style={{ maxWidth: '560px' }}>
+                <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginBottom: '20px' }}>
+                  Your earnings are paid out to this account. PAN and account number are partly hidden for your security.
+                </p>
+
+                {/* Identity (read-only, masked) */}
+                <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '20px 22px', marginBottom: '18px' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={labelStyle}>LEGAL NAME (as on PAN)</label>
+                    <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{kyc?.legal_name || '—'}</p>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>PAN NUMBER</label>
+                    <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans, letterSpacing: '.08em' }}>{maskTail(kyc?.pan_number)}</p>
+                    <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginTop: '4px' }}>
+                      PAN can't be changed here — contact support if it's wrong.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Payout details (editable) */}
+                <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '20px 22px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                    <h3 style={{ fontFamily: S.serif, fontSize: '1.15rem', color: S.dark }}>Bank & GST</h3>
+                    {!editingPayout && <button onClick={() => setEditingPayout(true)} style={editLink}>Edit</button>}
+                    {payoutSaved && <span style={{ fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>✓ Saved</span>}
+                  </div>
+
+                  {editingPayout ? (
+                    <>
+                      <div style={{ marginBottom: '14px' }}>
+                        <label style={labelStyle}>BANK ACCOUNT NUMBER</label>
+                        <input style={inputStyle} value={payoutForm.bank_account}
+                          onChange={e => setPayoutForm({ ...payoutForm, bank_account: e.target.value })}
+                          placeholder={kyc?.bank_account ? `Current: ${maskTail(kyc.bank_account)} — type a new number to change` : 'Account number'} />
+                        <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginTop: '4px' }}>Leave blank to keep your current account.</p>
+                      </div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <label style={labelStyle}>IFSC CODE</label>
+                        <input style={inputStyle} value={payoutForm.ifsc_code}
+                          onChange={e => setPayoutForm({ ...payoutForm, ifsc_code: e.target.value.toUpperCase().slice(0, 11) })}
+                          placeholder="e.g. SBIN0001234" maxLength={11} />
+                      </div>
+                      <div style={{ marginBottom: '18px' }}>
+                        <label style={labelStyle}>GST NUMBER (optional)</label>
+                        <input style={inputStyle} value={payoutForm.gst_number}
+                          onChange={e => setPayoutForm({ ...payoutForm, gst_number: e.target.value.toUpperCase().slice(0, 15) })}
+                          placeholder="Leave blank if not registered" maxLength={15} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={savePayout} disabled={savingPayout} style={saveBtn}>{savingPayout ? 'SAVING…' : 'SAVE'}</button>
+                        <button onClick={() => { setEditingPayout(false); loadKyc() }} style={cancelBtn}>CANCEL</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ marginBottom: '14px' }}>
+                        <label style={labelStyle}>BANK ACCOUNT</label>
+                        <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{maskTail(kyc?.bank_account)}</p>
+                      </div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <label style={labelStyle}>IFSC CODE</label>
+                        <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{kyc?.ifsc_code || '—'}</p>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>GST NUMBER</label>
+                        <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{kyc?.gst_number || '—'}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 
