@@ -1,10 +1,10 @@
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../../components/Logo'
-import { useAuth }     from '../../context/AuthContext'
 import { useCart }     from '../../context/CartContext'
 import { useWishlist } from '../../context/WishlistContext'
 import { useCurrency } from '../../context/CurrencyContext'
+import AccountMenu from '../../components/AccountMenu'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -28,10 +28,9 @@ function CurrencyToggle() {
 }
 
 export default function OrderSuccess() {
-  const isMobile = useIsMobile() // ✅ FIXED: hook called inside OrderSuccess
+  const isMobile = useIsMobile()
 
   const navigate                = useNavigate()
-  const { user, role, signOut } = useAuth()
   const { totalItems }          = useCart()
   const { wishlist }            = useWishlist()
 
@@ -68,34 +67,7 @@ export default function OrderSuccess() {
             )}
           </span>
 
-          {user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
-                {user.email?.split('@')[0] || user.phone}
-              </span>
-              {role === 'seller' && (
-                <span onClick={() => navigate('/seller/dashboard')}
-                  style={{ fontSize: '11px', color: S.accent, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                  MY DASHBOARD
-                </span>
-              )}
-              {user?.email === 'bikidutta319@gmail.com' && (
-                <span onClick={() => navigate('/admin')}
-                  style={{ fontSize: '11px', color: S.gold, cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.08em' }}>
-                  ADMIN ⚙️
-                </span>
-              )}
-              <button onClick={signOut}
-                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.accent, background: 'transparent', border: `1px solid ${S.accent}`, padding: '7px 12px', cursor: 'pointer', fontFamily: S.sans }}>
-                SIGN OUT
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => navigate('/login')}
-              style={{ background: S.dark, color: '#fff', fontSize: '11px', letterSpacing: '.1em', padding: '9px 20px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-              SIGN IN
-            </button>
-          )}
+          <AccountMenu />
         </div>
       </nav>
 
@@ -113,14 +85,14 @@ export default function OrderSuccess() {
             Thank you for supporting Northeast Indian artisans. Your order has been received and the artisan has been notified. You'll receive a confirmation email shortly.
           </p>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-            <button onClick={() => navigate('/')}
-              style={{ background: S.dark, color: '#fff', padding: '12px 28px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-              CONTINUE SHOPPING
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => navigate('/account?tab=orders')}
+              style={{ background: S.accent, color: '#fff', padding: '12px 28px', fontSize: '11px', letterSpacing: '.12em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+              VIEW MY ORDERS
             </button>
             <button onClick={() => navigate('/products')}
               style={{ background: 'transparent', color: S.dark, padding: '12px 28px', fontSize: '11px', letterSpacing: '.12em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
-              EXPLORE MORE
+              CONTINUE SHOPPING
             </button>
           </div>
 
