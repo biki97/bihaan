@@ -33,7 +33,7 @@ function statusStyle(status) {
   return { bg: '#f3f0eb', color: S.muted, border: S.border }
 }
 
-const EMPTY_ADDR = { name: '', phone: '', address: '', city: '', state: '', pincode: '' }
+const EMPTY_ADDR = { label: 'Home', name: '', phone: '', address: '', city: '', state: '', pincode: '' }
 
 export default function Account() {
   const isMobile = useIsMobile()
@@ -53,6 +53,7 @@ export default function Account() {
   const [addrForm,     setAddrForm]     = useState(EMPTY_ADDR)
   const [editingId,    setEditingId]    = useState(null)   // null = not editing; 'new' = adding; else address id
   const [savingAddr,   setSavingAddr]   = useState(false)
+  const [openMenuId,   setOpenMenuId]   = useState(null)   // which address card's ⋮ menu is open
 
   // Profile state
   const [profileForm,    setProfileForm]    = useState({ full_name: '', phone: '' })
@@ -177,6 +178,7 @@ export default function Account() {
 
   const inputStyle = { width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.white, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }
   const labelStyle = { fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }
+  const menuItem   = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '13px', color: S.dark, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }
 
   return (
     <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
@@ -300,6 +302,17 @@ export default function Account() {
                     <h3 style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark, marginBottom: '16px' }}>
                       {editingId === 'new' ? 'Add a new address' : 'Edit address'}
                     </h3>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>ADDRESS TYPE</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {['Home', 'Work', 'Other'].map(t => (
+                          <button key={t} onClick={() => setAddrForm({ ...addrForm, label: t })}
+                            style={{ padding: '8px 18px', fontSize: '12px', fontFamily: S.sans, cursor: 'pointer', borderRadius: '3px', border: `1px solid ${addrForm.label === t ? S.accent : S.border}`, background: addrForm.label === t ? '#fef9f7' : S.white, color: addrForm.label === t ? S.accent : S.dark }}>
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                       <div>
                         <label style={labelStyle}>FULL NAME *</label>
@@ -348,26 +361,49 @@ export default function Account() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* click-away overlay for the ⋮ menus */}
+                    {openMenuId !== null && (
+                      <div onClick={() => setOpenMenuId(null)} style={{ position: 'fixed', inset: 0, zIndex: 15 }} />
+                    )}
                     {addresses.map(a => (
-                      <div key={a.id} style={{ background: S.white, border: `1px solid ${a.is_default ? S.accent : S.border}`, borderRadius: '4px', padding: '16px 18px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px', flexWrap: 'wrap' }}>
-                          <div>
-                            <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, fontWeight: 500 }}>
-                              {a.name} · {a.phone}
-                              {a.is_default && <span style={{ marginLeft: '10px', fontSize: '9px', letterSpacing: '.08em', color: S.accent, background: '#fef9f7', border: `1px solid ${S.accent}`, padding: '2px 7px' }}>DEFAULT</span>}
-                            </p>
-                            <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '5px' }}>
-                              {[a.address, a.city, a.state, a.pincode].filter(Boolean).join(', ')}
-                            </p>
+                      <div key={a.id} style={{ background: S.white, border: `1px solid ${a.is_default ? S.accent : S.border}`, borderRadius: '6px', padding: '18px 20px', position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '10px', letterSpacing: '.08em', color: S.muted, background: '#f0ece6', padding: '4px 10px', borderRadius: '3px', fontFamily: S.sans, fontWeight: 600 }}>
+                              {(a.label || 'Home').toUpperCase()}
+                            </span>
+                            {a.is_default && (
+                              <span style={{ fontSize: '9px', letterSpacing: '.08em', color: S.accent, background: '#fef9f7', border: `1px solid ${S.accent}`, padding: '3px 8px', borderRadius: '3px', fontFamily: S.sans }}>DEFAULT</span>
+                            )}
+                          </div>
+
+                          {/* 3-dot menu */}
+                          <div style={{ position: 'relative', zIndex: 20 }}>
+                            <button onClick={() => setOpenMenuId(openMenuId === a.id ? null : a.id)}
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '20px', color: S.muted, lineHeight: 1, padding: '0 6px' }}>⋮</button>
+                            {openMenuId === a.id && (
+                              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '160px', overflow: 'hidden' }}>
+                                {!a.is_default && (
+                                  <button onClick={() => { setOpenMenuId(null); setDefault(a.id) }} style={menuItem}
+                                    onMouseOver={e => e.currentTarget.style.background = S.bg} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>Set as default</button>
+                                )}
+                                <button onClick={() => { setOpenMenuId(null); startEdit(a) }} style={menuItem}
+                                  onMouseOver={e => e.currentTarget.style.background = S.bg} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>Edit</button>
+                                <button onClick={() => { setOpenMenuId(null); deleteAddress(a.id) }} style={{ ...menuItem, color: '#b91c1c' }}
+                                  onMouseOver={e => e.currentTarget.style.background = S.bg} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>Delete</button>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
-                          {!a.is_default && (
-                            <button onClick={() => setDefault(a.id)} style={{ fontSize: '11px', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>SET AS DEFAULT</button>
-                          )}
-                          <button onClick={() => startEdit(a)} style={{ fontSize: '11px', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>EDIT</button>
-                          <button onClick={() => deleteAddress(a.id)} style={{ fontSize: '11px', color: '#b91c1c', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em', padding: 0 }}>DELETE</button>
-                        </div>
+
+                        <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans, fontWeight: 600, marginTop: '14px' }}>
+                          {a.name}
+                          {a.phone && <span style={{ fontWeight: 600, marginLeft: '16px' }}>{a.phone}</span>}
+                        </p>
+                        <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '6px', lineHeight: 1.65 }}>
+                          {[a.address, a.city, a.state].filter(Boolean).join(', ')}
+                          {a.pincode && <> - <span style={{ fontWeight: 600, color: S.dark }}>{a.pincode}</span></>}
+                        </p>
                       </div>
                     ))}
                   </div>
