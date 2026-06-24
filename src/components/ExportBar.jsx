@@ -1,15 +1,9 @@
 // src/components/ExportBar.jsx
 //
 // Reusable export toolbar: a date-range filter + "Download CSV" + "Print".
-// Drop it above any list. The PARENT owns the data and the filtering — this
-// component is just the controls. The parent passes:
-//   - from / to (YYYY-MM-DD strings) and their setters
-//   - onDownload() and onPrint() handlers (which act on the already-filtered rows)
-//   - count (rows shown after filtering) and total (rows before filtering)
-//
-// Two helpers travel with it so you don't repeat them in every page:
-//   - filterByDate(rows, getDate, from, to)  → returns rows inside the range
-//   - printTable(title, headers, rows, subtitle) → opens a clean printable page
+// The PARENT owns the data; this is just the controls. Helpers travel with it:
+//   - filterByDate(rows, getDate, from, to)
+//   - printTable(title, headers, rows, subtitle)
 
 const S = {
     white: '#ffffff', dark: '#1a1208', accent: '#8b2500',
@@ -17,9 +11,6 @@ const S = {
     sans: "'Inter', system-ui, sans-serif",
   }
   
-  // Keep only rows whose date falls within [from, to], inclusive.
-  // getDate(row) must return an ISO date/timestamp (e.g. created_at).
-  // An empty `from` or `to` leaves that side open-ended.
   export function filterByDate(rows, getDate, from, to) {
     if (!from && !to) return rows
     const fromT = from ? new Date(from + 'T00:00:00').getTime()     : -Infinity
@@ -38,8 +29,6 @@ const S = {
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   }
   
-  // Build a clean printable page from the SAME headers used for CSV, then open
-  // the browser print dialog. The user can "Print" or choose "Save as PDF" there.
   export function printTable(title, headers, rows, subtitle = '') {
     if (!rows || rows.length === 0) { alert('Nothing to print in this range'); return }
   

@@ -15,22 +15,14 @@ const S = {
 const ADMIN_EMAIL = 'bikidutta319@gmail.com'
 
 // ── CSV helpers ──
-// Safely quote a value so commas/quotes/newlines inside don't break the CSV.
 function csvCell(value) {
   const s = (value === null || value === undefined) ? '' : String(value)
-  // Escape double-quotes by doubling them, then wrap the whole cell in quotes
   return `"${s.replace(/"/g, '""')}"`
 }
-
-// Turn an array of row-objects into a CSV string and trigger a browser download.
 function downloadCSV(filename, headers, rows) {
   const headerLine = headers.map(h => csvCell(h.label)).join(',')
-  const dataLines  = rows.map(row =>
-    headers.map(h => csvCell(h.value(row))).join(',')
-  )
+  const dataLines  = rows.map(row => headers.map(h => csvCell(h.value(row))).join(','))
   const csv = [headerLine, ...dataLines].join('\n')
-
-  // Prepend BOM so Excel reads ₹ and other UTF-8 characters correctly
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
@@ -41,8 +33,6 @@ function downloadCSV(filename, headers, rows) {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
-
-// Parse the shipping_address JSON safely (it's stored as a JSON string)
 function parseAddress(raw) {
   try {
     return typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
@@ -90,11 +80,10 @@ export default function AdminDashboard() {
   const [tab,      setTab]      = useState('sellers')
   const [sellers,  setSellers]  = useState([])
   const [orders,   setOrders]   = useState([])
-  const [items,    setItems]    = useState([])   // order_items joined with seller + product
+  const [items,    setItems]    = useState([])
   const [loading,  setLoading]  = useState(true)
   const [savingId, setSavingId] = useState(null)
 
-  // Date-range filter (shared across all three tabs)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
 
@@ -117,9 +106,6 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false })
 
-    // Pull every order_item, plus the seller's shop/email and the product title.
-    // created_at on the joined order lets us date-filter payouts too.
-    // If seller_id is null on a row, the seller join just comes back null — handled below.
     const { data: itemsData } = await supabase
       .from('order_items')
       .select(`
@@ -146,7 +132,6 @@ export default function AdminDashboard() {
     loadData()
   }
 
-  // Mark every pending item for one seller as paid
   async function markSellerPaid(sellerKey, itemIds) {
     setSavingId(sellerKey)
     await supabase
@@ -157,7 +142,7 @@ export default function AdminDashboard() {
     setSavingId(null)
   }
 
-  // ── Date-range filtering — applies to the lists, the CSV, AND the print view ──
+  // ── Date-range filtering — lists + CSV + print ──
   const filteredOrders  = filterByDate(orders,  o  => o.created_at,         dateFrom, dateTo)
   const filteredSellers = filterByDate(sellers, s  => s.created_at,         dateFrom, dateTo)
   const filteredItems   = filterByDate(items,   it => it.orders?.created_at, dateFrom, dateTo)
@@ -166,47 +151,54 @@ export default function AdminDashboard() {
     ? `Date range: ${dateFrom || 'beginning'} → ${dateTo || 'today'}`
     : 'All dates'
 
-  // ── Download + print handlers ──
-  const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD for filenames
+  const today = new Date().toISOString().slice(0, 10)
 
   function downloadOrders() {
     if (filteredOrders.length === 0) { alert('No orders in this date range'); return }
     downloadCSV(`bihaan-orders-${today}.csv`, ORDER_HEADERS, filteredOrders)
   }
-  function printOrders() {
-    printTable('Bihaan — Orders', ORDER_HEADERS, filteredOrders, rangeLabel)
-  }
+  function printOrders() { printTable('Bihaan — Orders', ORDER_HEADERS, filteredOrders, rangeLabel) }
 
   function downloadPayouts() {
     if (payoutList.length === 0) { alert('No payouts in this date range'); return }
     downloadCSV(`bihaan-payouts-${today}.csv`, PAYOUT_HEADERS, payoutList)
   }
-  function printPayouts() {
-    printTable('Bihaan — Seller Payouts', PAYOUT_HEADERS, payoutList, rangeLabel)
-  }
+  function printPayouts() { printTable('Bihaan — Seller Payouts', PAYOUT_HEADERS, payoutList, rangeLabel) }
 
   function downloadSellers() {
     if (filteredSellers.length === 0) { alert('No sellers in this date range'); return }
     downloadCSV(`bihaan-sellers-${today}.csv`, SELLER_HEADERS, filteredSellers)
   }
-  function printSellers() {
-    printTable('Bihaan — Sellers', SELLER_HEADERS, filteredSellers, rangeLabel)
+  function printSellers() { printTable('Bihaan — Sellers', SELLER_HEADERS, filteredSellers, rangeLabel) }
+
+  // ── Money summary (all-time, independent of the date filter) ──
+  // "Collected" = money actually in your account: online orders that are paid,
+  // and COD orders where the cash has been received (not still cod_pending).
+  const isCollected = o =>
+    o.payment_method === 'cod' ? o.status !== 'cod_pending' : o.status === 'paid'
+
+  const receivedFromBuyers = orders.filter(isCollected)
+    .reduce((s, o) => s + Number(o.total_amount || 0), 0)
+  const commissionEarned = Math.round(receivedFromBuyers * 0.1)
+
+  let oweToSellers = 0, paidToSellers = 0, codHeldBack = 0
+  for (const it of items) {
+    const amt = Number(it.seller_amount) || 0
+    const codUncollected = it.orders?.payment_method === 'cod' && it.orders?.status === 'cod_pending'
+    if (it.payout_status === 'paid') paidToSellers += amt
+    else if (codUncollected)         codHeldBack   += amt
+    else                             oweToSellers  += amt
   }
 
-  // ── Stats (always all-time, regardless of the date filter) ──
-  const totalRevenue   = orders.reduce((s, o) => s + (Number(o.total_amount) * 0.1), 0)
   const pendingSellers = sellers.filter(s => !s.is_approved).length
 
-  // ── Group order_items by seller, splitting pending vs paid ──
-  // Built from filteredItems so the date range flows through to payouts too.
-  // COD orders not yet collected are tracked separately so you don't pay before cash arrives.
+  // ── Group order_items by seller (built from filteredItems) ──
   const payoutGroups = {}
   for (const it of filteredItems) {
     const key      = it.seller_id || 'unassigned'
     const shopName = it.sellers?.shop_name || (it.seller_id ? 'Unknown shop' : 'Unassigned seller')
     const email    = it.sellers?.profiles?.email || '—'
     const amount   = Number(it.seller_amount) || 0
-    // COD order where cash hasn't been collected yet
     const isCodUncollected = it.orders?.payment_method === 'cod' && it.orders?.status === 'cod_pending'
 
     if (!payoutGroups[key]) {
@@ -214,27 +206,17 @@ export default function AdminDashboard() {
         key, shopName, email,
         pendingAmount: 0, pendingItemIds: [],
         paidAmount: 0, itemCount: 0,
-        codPendingAmount: 0,   // money tied to COD orders not yet collected
+        codPendingAmount: 0,
       }
     }
     const g = payoutGroups[key]
     g.itemCount += 1
-    if (it.payout_status === 'paid') {
-      g.paidAmount += amount
-    } else if (isCodUncollected) {
-      // Show it, but separately — cash not in hand yet, don't pay
-      g.codPendingAmount += amount
-    } else {
-      g.pendingAmount += amount
-      g.pendingItemIds.push(it.id)
-    }
+    if (it.payout_status === 'paid')      g.paidAmount += amount
+    else if (isCodUncollected)            g.codPendingAmount += amount
+    else { g.pendingAmount += amount; g.pendingItemIds.push(it.id) }
   }
-  const payoutList = Object.values(payoutGroups)
-    .sort((a, b) => b.pendingAmount - a.pendingAmount)
-
+  const payoutList = Object.values(payoutGroups).sort((a, b) => b.pendingAmount - a.pendingAmount)
   const totalPending = payoutList.reduce((s, g) => s + g.pendingAmount, 0)
-
-  // How many seller groups exist before the date filter (for the "X of Y" label)
   const totalPayoutGroups = new Set(items.map(it => it.seller_id || 'unassigned')).size
 
   if (loading) return (
@@ -243,7 +225,6 @@ export default function AdminDashboard() {
     </div>
   )
 
-  // Small reusable "nothing matched the filter" block
   const noneInRange = (label) => (
     <div style={{ textAlign: 'center', padding: '48px 0' }}>
       <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>No {label} in this date range</p>
@@ -264,9 +245,7 @@ export default function AdminDashboard() {
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <Logo size={36} showText={true} />
         </div>
-        <p style={{ fontSize: '12px', letterSpacing: '.15em', color: S.accent, fontFamily: S.sans }}>
-          ADMIN PANEL
-        </p>
+        <p style={{ fontSize: '12px', letterSpacing: '.15em', color: S.accent, fontFamily: S.sans }}>ADMIN PANEL</p>
         <button onClick={() => navigate('/')}
           style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
           ← BACK TO STORE
@@ -275,20 +254,16 @@ export default function AdminDashboard() {
 
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '36px 40px' }}>
 
-        {/* Stats */}
+        {/* Overview */}
         <div style={{ marginBottom: '32px' }}>
-          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '8px', fontFamily: S.sans }}>
-            OVERVIEW
-          </p>
-          <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>
-            Admin Dashboard
-          </h1>
+          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '8px', fontFamily: S.sans }}>OVERVIEW</p>
+          <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark, marginBottom: '20px' }}>Admin Dashboard</h1>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
             {[
               ['Total Sellers',    sellers.length],
               ['Pending Approval', pendingSellers],
               ['Total Orders',     orders.length],
-              ['Platform Revenue', `₹${Math.round(totalRevenue).toLocaleString()}`],
+              ['Your Commission',  `₹${commissionEarned.toLocaleString()}`],
             ].map(([label, value]) => (
               <div key={label} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.8rem', color: S.dark, marginBottom: '4px' }}>{value}</p>
@@ -296,6 +271,30 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Money summary */}
+        <div style={{ marginBottom: '32px' }}>
+          <p style={{ fontSize: '10px', letterSpacing: '.2em', color: S.accent, marginBottom: '12px', fontFamily: S.sans }}>MONEY</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
+            {[
+              ['Received from buyers',    `₹${Math.round(receivedFromBuyers).toLocaleString()}`, 'Gross cash collected in your account', S.border],
+              ['To pay sellers',          `₹${Math.round(oweToSellers).toLocaleString()}`,        'Pending payouts — pay, then mark paid', S.accent],
+              ['Your commission (10%)',   `₹${commissionEarned.toLocaleString()}`,                'Your earnings on collected orders',     S.border],
+              ['Already paid to sellers', `₹${Math.round(paidToSellers).toLocaleString()}`,       'Disbursed so far',                      S.border],
+            ].map(([label, value, caption, bar]) => (
+              <div key={label} style={{ background: S.white, border: `1px solid ${S.border}`, borderLeft: `3px solid ${bar}`, padding: '20px', borderRadius: '3px' }}>
+                <p style={{ fontFamily: S.serif, fontSize: '1.6rem', color: S.dark, marginBottom: '4px' }}>{value}</p>
+                <p style={{ fontSize: '11px', color: S.dark, fontFamily: S.sans, letterSpacing: '.03em', marginBottom: '4px' }}>{label}</p>
+                <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>{caption}</p>
+              </div>
+            ))}
+          </div>
+          {codHeldBack > 0 && (
+            <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, marginTop: '12px', background: '#fef5e7', border: '1px solid #fcd34d', padding: '8px 12px', borderRadius: '3px' }}>
+              ⚠ ₹{Math.round(codHeldBack).toLocaleString()} of seller money is from COD orders where cash isn't collected yet — not counted as received, and don't pay it out until delivery.
+            </p>
+          )}
         </div>
 
         {/* Tabs */}
@@ -316,12 +315,9 @@ export default function AdminDashboard() {
         {tab === 'sellers' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <ExportBar
-              from={dateFrom} setFrom={setDateFrom}
-              to={dateTo}     setTo={setDateTo}
+              from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
               onDownload={downloadSellers} onPrint={printSellers}
-              count={filteredSellers.length} total={sellers.length}
-              downloadLabel="DOWNLOAD CSV"
-            />
+              count={filteredSellers.length} total={sellers.length} downloadLabel="DOWNLOAD CSV" />
             {sellers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No sellers yet</p>
@@ -369,12 +365,9 @@ export default function AdminDashboard() {
         {tab === 'orders' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <ExportBar
-              from={dateFrom} setFrom={setDateFrom}
-              to={dateTo}     setTo={setDateTo}
+              from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
               onDownload={downloadOrders} onPrint={printOrders}
-              count={filteredOrders.length} total={orders.length}
-              downloadLabel="DOWNLOAD CSV"
-            />
+              count={filteredOrders.length} total={orders.length} downloadLabel="DOWNLOAD CSV" />
             {orders.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 0' }}>
                 <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No orders yet</p>
@@ -415,16 +408,11 @@ export default function AdminDashboard() {
         {/* Payouts tab */}
         {tab === 'payouts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
             <ExportBar
-              from={dateFrom} setFrom={setDateFrom}
-              to={dateTo}     setTo={setDateTo}
+              from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
               onDownload={downloadPayouts} onPrint={printPayouts}
-              count={payoutList.length} total={totalPayoutGroups}
-              downloadLabel="DOWNLOAD CSV"
-            />
+              count={payoutList.length} total={totalPayoutGroups} downloadLabel="DOWNLOAD CSV" />
 
-            {/* Summary line */}
             <div style={{ background: '#fef9f7', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '16px 20px', borderRadius: '3px', marginBottom: '8px' }}>
               <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
                 You owe sellers a total of <strong>₹{Math.round(totalPending).toLocaleString()}</strong> across {payoutList.filter(g => g.pendingAmount > 0).length} seller(s).
@@ -444,22 +432,14 @@ export default function AdminDashboard() {
               <div key={g.key} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'center' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                    <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: g.key === 'unassigned' ? S.accent : S.dark }}>
-                      {g.shopName}
-                    </p>
+                    <p style={{ fontFamily: S.serif, fontSize: '1.1rem', color: g.key === 'unassigned' ? S.accent : S.dark }}>{g.shopName}</p>
                     {g.pendingAmount > 0 ? (
-                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#fef5e7', color: '#92400e', border: '1px solid #fcd34d' }}>
-                        PAYMENT DUE
-                      </span>
+                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#fef5e7', color: '#92400e', border: '1px solid #fcd34d' }}>PAYMENT DUE</span>
                     ) : (
-                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac' }}>
-                        ALL PAID
-                      </span>
+                      <span style={{ fontSize: '10px', padding: '2px 8px', letterSpacing: '.08em', fontFamily: S.sans, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac' }}>ALL PAID</span>
                     )}
                   </div>
-                  <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>
-                    {g.email} · {g.itemCount} item(s)
-                  </p>
+                  <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>{g.email} · {g.itemCount} item(s)</p>
                   <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
                     Pending: <strong style={{ color: S.dark }}>₹{Math.round(g.pendingAmount).toLocaleString()}</strong>
                     {g.paidAmount > 0 && <span> · Already paid: ₹{Math.round(g.paidAmount).toLocaleString()}</span>}
@@ -476,13 +456,9 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontFamily: S.serif, fontSize: '1.4rem', color: S.dark, marginBottom: '8px' }}>
-                    ₹{Math.round(g.pendingAmount).toLocaleString()}
-                  </p>
+                  <p style={{ fontFamily: S.serif, fontSize: '1.4rem', color: S.dark, marginBottom: '8px' }}>₹{Math.round(g.pendingAmount).toLocaleString()}</p>
                   {g.pendingAmount > 0 && g.key !== 'unassigned' && (
-                    <button
-                      onClick={() => markSellerPaid(g.key, g.pendingItemIds)}
-                      disabled={savingId === g.key}
+                    <button onClick={() => markSellerPaid(g.key, g.pendingItemIds)} disabled={savingId === g.key}
                       style={{ background: savingId === g.key ? '#888' : '#15803d', color: '#fff', padding: '8px 16px', fontSize: '11px', letterSpacing: '.08em', border: 'none', cursor: savingId === g.key ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
                       {savingId === g.key ? 'SAVING...' : 'MARK AS PAID'}
                     </button>

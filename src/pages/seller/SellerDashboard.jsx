@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Logo from '../../components/Logo'
 import ExportBar, { printTable, filterByDate } from '../../components/ExportBar'
+import EditProductModal from '../../components/EditProductModal'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -28,7 +29,7 @@ const timeOptions = [
   '5 days', '1 week', '2 weeks', '1 month'
 ]
 
-// ── CSV helpers (same approach as admin dashboard) ──
+// ── CSV helpers ──
 function csvCell(value) {
   const s = (value === null || value === undefined) ? '' : String(value)
   return `"${s.replace(/"/g, '""')}"`
@@ -55,7 +56,7 @@ function parseAddress(raw) {
   }
 }
 
-// ── Column definitions for this seller's orders (shared by CSV + print) ──
+// ── Column definitions for this seller's orders (CSV + print) ──
 const MY_ORDER_HEADERS = [
   { label: 'Order Date',       value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
   { label: 'Product',          value: it => it.products?.title },
@@ -77,7 +78,6 @@ async function uploadToCloudinary(file) {
   formData.append('file', file)
   formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET)
   formData.append('folder', 'bihaan')
-
   const response = await fetch(
     `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
     { method: 'POST', body: formData }
@@ -87,7 +87,6 @@ async function uploadToCloudinary(file) {
   return data
 }
 
-// ── Build AI-enhanced URL from public_id ──
 function getEnhancedUrl(publicId) {
   const cloud = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
   return `https://res.cloudinary.com/${cloud}/image/upload/e_improve,e_sharpen:80,e_vibrance:20,q_auto,f_auto,w_800,h_1067,c_fill/${publicId}`
@@ -156,7 +155,7 @@ export default function SellerDashboard() {
   const [tab,          setTab]          = useState('products')
   const [seller,       setSeller]       = useState(null)
   const [products,     setProducts]     = useState([])
-  const [orders,       setOrders]       = useState([])   // this seller's order items (with buyer address)
+  const [orders,       setOrders]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [aiLoading,    setAiLoading]    = useState(false)
   const [aiResult,     setAiResult]     = useState(null)
@@ -167,6 +166,9 @@ export default function SellerDashboard() {
   // Date-range filter for the Orders tab
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
+
+  // Which product is being edited (null = modal closed)
+  const [editingProduct, setEditingProduct] = useState(null)
 
   const [aiInputs, setAiInputs] = useState({
     artisanName: '', village: '', state: '',
@@ -196,8 +198,6 @@ export default function SellerDashboard() {
       .order('created_at', { ascending: false })
     setProducts(prods || [])
 
-    // Load ONLY this seller's order items, joined to product title + the parent order
-    // (which holds buyer shipping address, status, date). RLS must allow seller to read own items.
     const { data: orderItems } = await supabase
       .from('order_items')
       .select(`
@@ -212,13 +212,12 @@ export default function SellerDashboard() {
     setLoading(false)
   }
 
-  // ── Date-range filtering — applies to the order list, the CSV, AND the print view ──
+  // ── Date-range filtering — order list + CSV + print ──
   const filteredOrders = filterByDate(orders, it => it.orders?.created_at, dateFrom, dateTo)
   const rangeLabel = (dateFrom || dateTo)
     ? `Date range: ${dateFrom || 'beginning'} → ${dateTo || 'today'}`
     : 'All dates'
 
-  // ── Download / print THIS seller's orders + buyer addresses ──
   function downloadMyOrders() {
     if (filteredOrders.length === 0) { alert('No orders in this date range'); return }
     const today = new Date().toISOString().slice(0, 10)
@@ -228,7 +227,6 @@ export default function SellerDashboard() {
     printTable('My Orders — Bihaan', MY_ORDER_HEADERS, filteredOrders, rangeLabel)
   }
 
-  // ── Handle image upload ──
   async function handleImageUpload(e) {
     const files = Array.from(e.target.files).slice(0, 4 - uploadedImages.length)
     if (files.length === 0) return
@@ -238,11 +236,7 @@ export default function SellerDashboard() {
       try {
         const data = await uploadToCloudinary(file)
         const enhanced = getEnhancedUrl(data.public_id)
-        newImages.push({
-          publicId: data.public_id,
-          original: data.secure_url,
-          enhanced,
-        })
+        newImages.push({ publicId: data.public_id, original: data.secure_url, enhanced })
       } catch (err) {
         alert('Image upload failed: ' + err.message)
       }
@@ -413,9 +407,18 @@ export default function SellerDashboard() {
                       </div>
                       <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark, marginBottom: '6px' }}>{p.title}</p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>₹{Number(p.price).toLocaleString()}</span>
+                        <span style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                          <span style={{ fontFamily: S.serif, fontSize: '1.1rem', color: S.dark }}>₹{Number(p.price).toLocaleString()}</span>
+                          {p.mrp && Number(p.mrp) > Number(p.price) && (
+                            <span style={{ fontSize: '11px', color: S.muted, textDecoration: 'line-through', fontFamily: S.sans }}>₹{Number(p.mrp).toLocaleString()}</span>
+                          )}
+                        </span>
                         <span style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>Stock: {p.stock}</span>
                       </div>
+                      <button onClick={() => setEditingProduct(p)}
+                        style={{ marginTop: '12px', width: '100%', background: 'transparent', color: S.accent, border: `1px solid ${S.accent}`, padding: '8px', fontSize: '11px', letterSpacing: '.08em', cursor: 'pointer', fontFamily: S.sans }}>
+                        EDIT PRODUCT
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -428,10 +431,8 @@ export default function SellerDashboard() {
         {tab === 'add' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
 
-            {/* Left — Image upload + AI inputs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-              {/* Image upload */}
               <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                   <div style={{ width: '32px', height: '32px', background: '#2d6a4f', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>📸</div>
@@ -460,14 +461,8 @@ export default function SellerDashboard() {
                         <p style={{ fontSize: '11px', color: S.accent, fontFamily: S.sans, marginTop: '8px' }}>✨ AI will enhance quality automatically</p>
                       </>
                     )}
-                    <input
-                      id="image-upload"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      style={{ display: 'none' }}
-                      onChange={handleImageUpload}
-                      disabled={uploadingImages} />
+                    <input id="image-upload" type="file" accept="image/jpeg,image/png,image/webp" multiple
+                      style={{ display: 'none' }} onChange={handleImageUpload} disabled={uploadingImages} />
                   </div>
                 )}
 
@@ -479,20 +474,12 @@ export default function SellerDashboard() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
                       {uploadedImages.map((img, i) => (
                         <div key={i} style={{ position: 'relative', aspectRatio: '3/4', borderRadius: '3px', overflow: 'hidden', border: i === 0 ? `2px solid ${S.accent}` : `1px solid ${S.border}` }}>
-                          <img src={img.enhanced} alt=""
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                          <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#2d6a4f', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans, letterSpacing: '.05em' }}>
-                            ✓ AI
-                          </div>
-                          <button
-                            onClick={() => removeImage(i)}
-                            style={{ position: 'absolute', top: '4px', left: '4px', background: 'rgba(139,37,0,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-                            ×
-                          </button>
+                          <img src={img.enhanced} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#2d6a4f', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans, letterSpacing: '.05em' }}>✓ AI</div>
+                          <button onClick={() => removeImage(i)}
+                            style={{ position: 'absolute', top: '4px', left: '4px', background: 'rgba(139,37,0,0.9)', color: '#fff', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>×</button>
                           {i === 0 && (
-                            <div style={{ position: 'absolute', bottom: '4px', left: '4px', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans }}>
-                              MAIN
-                            </div>
+                            <div style={{ position: 'absolute', bottom: '4px', left: '4px', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '8px', padding: '2px 5px', fontFamily: S.sans }}>MAIN</div>
                           )}
                         </div>
                       ))}
@@ -501,7 +488,6 @@ export default function SellerDashboard() {
                 )}
               </div>
 
-              {/* AI Listing Generator */}
               <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
                   <div style={{ width: '32px', height: '32px', background: S.accent, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✨</div>
@@ -563,7 +549,6 @@ export default function SellerDashboard() {
               </div>
             </div>
 
-            {/* Right — product form */}
             <div style={{ background: S.white, border: `1px solid ${S.border}`, padding: '28px' }}>
               <p style={{ fontSize: '12px', fontWeight: 500, color: S.dark, fontFamily: S.sans, marginBottom: '20px', letterSpacing: '.05em' }}>
                 PRODUCT DETAILS
@@ -586,8 +571,7 @@ export default function SellerDashboard() {
                 <div>
                   <label style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }}>DESCRIPTION *</label>
                   <textarea name="description" value={productForm.description} onChange={handleProductInput}
-                    placeholder="Generated by AI or type manually"
-                    rows={6}
+                    placeholder="Generated by AI or type manually" rows={6}
                     style={{ width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.bg, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans, resize: 'vertical' }} />
                 </div>
 
@@ -651,12 +635,9 @@ export default function SellerDashboard() {
             ) : (
               <div>
                 <ExportBar
-                  from={dateFrom} setFrom={setDateFrom}
-                  to={dateTo}     setTo={setDateTo}
+                  from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
                   onDownload={downloadMyOrders} onPrint={printMyOrders}
-                  count={filteredOrders.length} total={orders.length}
-                  downloadLabel="DOWNLOAD CSV"
-                />
+                  count={filteredOrders.length} total={orders.length} downloadLabel="DOWNLOAD CSV" />
 
                 {filteredOrders.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -689,7 +670,6 @@ export default function SellerDashboard() {
                               </span>
                             </div>
                           </div>
-                          {/* Shipping address for this seller to pack/ship */}
                           <div style={{ background: S.bg, border: `1px solid ${S.border}`, borderRadius: '3px', padding: '12px 14px' }}>
                             <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '6px', fontFamily: S.sans }}>SHIP TO</p>
                             <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{addr.name || '—'} · {addr.phone || ''}</p>
@@ -708,6 +688,15 @@ export default function SellerDashboard() {
         )}
 
       </div>
+
+      {/* Edit product modal */}
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          onClose={() => setEditingProduct(null)}
+          onSaved={loadData}
+        />
+      )}
     </div>
   )
 }

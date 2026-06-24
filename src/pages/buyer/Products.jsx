@@ -7,6 +7,7 @@ import { useCurrency } from '../../context/CurrencyContext'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
+import StarRating from '../../components/StarRating'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -49,7 +50,7 @@ function CurrencyToggle() {
 }
 
 export default function Products() {
-  const isMobile = useIsMobile() // ✅ FIXED: hook called inside Products
+  const isMobile = useIsMobile()
 
   const navigate                           = useNavigate()
   const [searchParams]                     = useSearchParams()
@@ -59,6 +60,7 @@ export default function Products() {
   const { formatPrice }                    = useCurrency()
 
   const [allProducts, setAllProducts] = useState([])
+  const [ratings,     setRatings]     = useState({})   // { productId: { avg, count } }
   const [loading,     setLoading]     = useState(true)
   const [search,      setSearch]      = useState('')
   const [cat,         setCat]         = useState(searchParams.get('category') || 'All Products')
@@ -78,6 +80,19 @@ export default function Products() {
       .eq('is_active', true)
       .order('created_at', { ascending: false })
     setAllProducts(data || [])
+
+    // Average rating per product (one query, aggregated client-side)
+    const { data: revs } = await supabase.from('reviews').select('product_id, rating')
+    const acc = {}
+    for (const r of (revs || [])) {
+      acc[r.product_id] = acc[r.product_id] || { sum: 0, count: 0 }
+      acc[r.product_id].sum += r.rating
+      acc[r.product_id].count += 1
+    }
+    const avgMap = {}
+    for (const pid in acc) avgMap[pid] = { avg: acc[pid].sum / acc[pid].count, count: acc[pid].count }
+    setRatings(avgMap)
+
     setLoading(false)
   }
 
@@ -239,6 +254,7 @@ export default function Products() {
                 const style = CAT_STYLE[product.category] || CAT_STYLE['Other']
                 const hasImage = product.images && product.images[0]
                 const wishlisted = isWishlisted(product.id)
+                const onSale = product.mrp && Number(product.mrp) > Number(product.price)
                 return (
                   <div key={product.id} style={{ cursor: 'pointer' }} className="group">
                     <div onClick={() => navigate(`/product/${product.id}`)}
@@ -250,6 +266,11 @@ export default function Products() {
                       ) : (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="group-hover:scale-105 transition-transform">
                           <span style={{ fontSize: '48px', opacity: .5 }}>{style.emoji}</span>
+                        </div>
+                      )}
+                      {onSale && (
+                        <div style={{ position: 'absolute', top: '7px', left: '7px', background: S.accent, color: '#fff', fontSize: '9px', letterSpacing: '.06em', padding: '3px 7px', fontFamily: S.sans }}>
+                          {Math.round((Number(product.mrp) - Number(product.price)) / Number(product.mrp) * 100)}% OFF
                         </div>
                       )}
                       <button onClick={e => { e.stopPropagation(); toggleWishlist(product) }}
@@ -269,9 +290,18 @@ export default function Products() {
                       <p style={{ fontSize: '10px', letterSpacing: '.08em', color: S.accent, marginBottom: '3px', fontFamily: S.sans }}>{product.state?.toUpperCase()}</p>
                       <p style={{ fontFamily: S.serif, fontSize: '14px', color: S.dark, marginBottom: '3px', lineHeight: 1.3 }}>{product.title}</p>
                       <p style={{ fontSize: '11px', color: S.muted, marginBottom: '7px', fontFamily: S.sans }}>{product.category}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '13px', fontWeight: 500, color: S.dark, fontFamily: S.sans }}>{formatPrice(product.price)}</span>
+                        {onSale && (
+                          <span style={{ fontSize: '11px', color: S.muted, textDecoration: 'line-through', fontFamily: S.sans }}>{formatPrice(product.mrp)}</span>
+                        )}
                       </div>
+                      {ratings[product.id] && (
+                        <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <StarRating value={ratings[product.id].avg} size={13} />
+                          <span style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans }}>({ratings[product.id].count})</span>
+                        </div>
+                      )}
                       {product.stock <= 3 && product.stock > 0 && (
                         <p style={{ fontSize: '11px', color: '#b91c1c', fontFamily: S.sans, marginTop: '4px' }}>Only {product.stock} left</p>
                       )}

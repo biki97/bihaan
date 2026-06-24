@@ -7,6 +7,7 @@ import { useCart }     from '../../context/CartContext'
 import { useAuth }     from '../../context/AuthContext'
 import { useWishlist } from '../../context/WishlistContext'
 import { useCurrency } from '../../context/CurrencyContext'
+import ProductReviews from '../../components/ProductReviews'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -42,7 +43,7 @@ function CurrencyToggle() {
 }
 
 function NavBar({ navigate, user, role, signOut, totalItems }) {
-  const isMobile = useIsMobile() // ✅ FIXED: hook called inside NavBar
+  const isMobile = useIsMobile()
   const { wishlist } = useWishlist()
   return (
     <nav style={{ background: S.white, borderBottom: `1px solid ${S.border}`, padding: isMobile ? '12px 16px' : '16px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -79,7 +80,7 @@ function NavBar({ navigate, user, role, signOut, totalItems }) {
 }
 
 export default function ProductDetail() {
-  const isMobile = useIsMobile() // ✅ FIXED: hook called inside ProductDetail
+  const isMobile = useIsMobile()
 
   const { id }                    = useParams()
   const navigate                  = useNavigate()
@@ -96,7 +97,7 @@ export default function ProductDetail() {
   const [selectedImage,  setSelectedImage]  = useState(0)
   const [qty,            setQty]            = useState(1)
   const [added,          setAdded]          = useState(false)
-  const [isOwnProduct,   setIsOwnProduct]   = useState(false)  // is the logged-in user the seller of THIS product?
+  const [isOwnProduct,   setIsOwnProduct]   = useState(false)
 
   useEffect(() => {
     loadProduct()
@@ -122,7 +123,6 @@ export default function ProductDetail() {
         .eq('id', prod.seller_id)
         .single()
       setSeller(sellerData)
-      // Block buying your own product: does this product's seller belong to the logged-in user?
       setIsOwnProduct(!!user && sellerData?.user_id === user.id)
     } else {
       setIsOwnProduct(false)
@@ -165,6 +165,7 @@ export default function ProductDetail() {
   const catStyle = CAT_STYLE[product.category] || CAT_STYLE['Other']
   const hasImages = product.images && product.images.length > 0
   const wishlisted = isWishlisted(product.id)
+  const onSale = product.mrp && Number(product.mrp) > Number(product.price)
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
@@ -239,6 +240,14 @@ export default function ProductDetail() {
             <span style={{ fontFamily: S.serif, fontSize: '2rem', color: S.dark, fontWeight: 400 }}>
               {formatPrice(product.price)}
             </span>
+            {onSale && (
+              <>
+                <span style={{ fontSize: '1.1rem', color: S.muted, textDecoration: 'line-through', fontFamily: S.sans }}>{formatPrice(product.mrp)}</span>
+                <span style={{ fontSize: '12px', color: '#15803d', background: '#f0fdf4', border: '1px solid #86efac', padding: '3px 10px', fontFamily: S.sans, letterSpacing: '.05em' }}>
+                  {Math.round((Number(product.mrp) - Number(product.price)) / Number(product.mrp) * 100)}% OFF
+                </span>
+              </>
+            )}
           </div>
 
           {product.stock <= 3 && product.stock > 0 && (
@@ -267,7 +276,6 @@ export default function ProductDetail() {
           </div>
 
           {isOwnProduct ? (
-            // Seller viewing their OWN product — no buying, just a notice + manage link
             <div style={{ marginBottom: '24px' }}>
               <div style={{ background: '#eef3f8', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.accent}`, padding: '14px 16px', borderRadius: '3px', marginBottom: '12px' }}>
                 <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
@@ -333,6 +341,11 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
+
+      {/* Customer Reviews */}
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 40px 48px' }}>
+        <ProductReviews productId={id} />
+      </div>
 
       {/* Recently Viewed */}
       {recentlyViewed.length > 0 && (
