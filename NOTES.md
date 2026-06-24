@@ -70,12 +70,24 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
 - api/generate-listing.js — AI listing serverless (uses process.env.GEMINI_API_KEY)
 - api/send-email.js — email serverless (uses process.env.RESEND_API_KEY)
 
-### New shared components (added this session)
+### New shared components (added earlier this build)
 - src/components/ExportBar.jsx — date-range filter + Download CSV + Print toolbar
   (exports helpers: filterByDate, printTable). Used by admin + seller dashboards.
 - src/components/StarRating.jsx — star display + interactive input (1–5)
 - src/components/ProductReviews.jsx — full reviews section for the product page
 - src/components/EditProductModal.jsx — seller edit-product modal (price/sale/stock/photos)
+
+### Account system (added this session)
+- src/pages/buyer/Account.jsx — buyer account hub at route /account. Tabs:
+  My Orders (real orders by buyer_id), Saved Addresses (full add/edit/delete/default
+  with Home/Work/Other type tag + ⋮ menu), My Profile (editable first/last name + phone,
+  read-only email). Reads ?tab= query param to open the right tab. Waits for auth
+  `loading` before redirecting (fixes refresh-bounce-to-login bug).
+- src/components/AccountMenu.jsx — nav avatar dropdown (My Profile/Orders/Addresses/
+  Wishlist + Seller/Admin links when relevant + Logout). Drop-in, reads user itself.
+  Now in the nav of ALL buyer pages: Home, Products, ProductDetail, Cart, Wishlist,
+  OrderSuccess. NOT on Checkout (kept distraction-free) or Admin (its own panel).
+- App.jsx: added `import Account` + `<Route path="/account" element={<Account />} />`
 
 ---
 
@@ -163,12 +175,22 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
 ## Database — Supabase
 
 ### Tables of note
-- products — now has an `mrp` column (numeric, nullable) for sale display
+- products — has an `mrp` column (numeric, nullable) for sale display
 - orders — buyer column is `buyer_id` (NOT user_id) — important for any order ownership check
 - order_items — product_id, seller_id, seller_amount, platform_amount, payout_status, quantity
-- reviews — NEW table: id, product_id, user_id, rating(1–5), comment, images(text[]), created_at
+- reviews — id, product_id, user_id, rating(1–5), comment, images(text[]), created_at
   - one review per (product_id, user_id); RLS: public read, verified-buyer insert, own update/delete
   - verified-purchase check joins order_items → orders on o.buyer_id = auth.uid()
+- addresses — NEW: id, user_id, label(Home/Work/Other), name, phone, address, city, state,
+  pincode, is_default, created_at. RLS: each user manages only their own rows (select/insert/
+  update/delete where user_id = auth.uid()). Used by the buyer Account address book.
+- sellers — PUBLIC-readable (policy "anyone views sellers" = true so product pages show shop
+  names). Holds ONLY non-sensitive shop info: shop_name, description, state, district,
+  is_approved, total_earnings. bank_account / ifsc_code columns REMOVED (were a data-exposure
+  risk in a public table — see Security).
+- seller_kyc — NEW, LOCKED-DOWN: user_id(pk), legal_name, pan_number, gst_number,
+  bank_account, ifsc_code, created_at. RLS: only the seller (user_id = auth.uid()) and admin
+  (auth.jwt() ->> 'email' = admin email) can read. This is where ALL sensitive seller data lives.
 
 ### Supabase gotcha (hit this session)
 - After adding a column, the API may say "Could not find the 'x' column in the schema cache."
@@ -185,19 +207,38 @@ expected. Test on the LIVE site logged in as admin. If admin check ever fails on
 switch to the `auth.jwt() ->> 'email'` version.
 
 #### RLS status
-- order_items — RLS ON. Policies: authenticated insert, admin read, admin update (mark paid)
+- order_items — RLS ON. Policies: authenticated insert, admin read, admin update (mark paid),
+  AND "buyers view own order items" (select where the parent order's buyer_id = auth.uid()) ✓
 - orders — RLS ON. Policies: admin view all, authenticated create, users view own
 - products — RLS ON. Policies: anyone view active, sellers insert, sellers update own
 - reviews — RLS ON. Policies: public read, verified-buyer insert, own update, own delete
-- sellers — TODO: confirm RLS on + policies
-- profiles — TODO: confirm RLS on + policies (reviewer name falls back to "Verified buyer"
-  if profiles isn't readable by others — fine, but confirm intended)
+- addresses — RLS ON. Policies: user manages only their own rows ✓
+- seller_kyc — RLS ON. Policies: seller reads own + admin reads all (sensitive data) ✓
+- sellers — RLS ON. "anyone views sellers" = true (public read, intentional for shop names).
+  Safe because sensitive columns were moved out to seller_kyc.
+- profiles — has "users update own profile" policy ✓ (confirmed when building profile editing).
+  Still worth confirming the full read policy set.
 
 ### TODO security
-- [ ] Confirm RLS ON for sellers and profiles (they hold personal data)
-- [ ] Add buyer "view own order items" SELECT policy when order-history page is built
+- [x] Add buyer "view own order items" SELECT policy (done — account orders page uses it)
+- [x] Move seller bank/PAN out of public sellers table into locked-down seller_kyc (done)
+- [ ] Confirm full RLS policy set on profiles
 - [ ] Make GitHub repo private (or .gitignore this NOTES.md)
 - [ ] If any real secret key was ever in a public file, rotate it
+
+### ⚠️ Sensitive-data exposure — found & fixed this session
+- The `sellers` table has a public read policy ("anyone views sellers" = true) so product
+  pages can show shop names. RLS is ROW-level, not column-level — a `true` read policy exposes
+  ALL columns. The old `sellers.bank_account` / `ifsc_code` columns were therefore readable by
+  anyone via the anon key.
+- Fix: created `seller_kyc` (locked-down) for legal_name/PAN/GST/bank/IFSC; SellerRegister now
+  writes sensitive data there and only non-sensitive shop info to `sellers`; removed the
+  bank_account/ifsc_code columns from `sellers`.
+- Lesson: never store sensitive data in any table that has a public/anon read policy.
+- Also fixed misleading "bank details are encrypted" copy in the seller form (they're stored
+  plain — RLS is what protects them; copy now says "private, visible only to you and the team").
+- "Verification" = data COLLECTED, not verified. Real PAN/bank verification needs an API
+  (Razorpay/Cashfree/Signzy) or manual admin review. Don't tell sellers they're "verified".
 
 ---
 
@@ -260,14 +301,26 @@ Technical / security:
 - Wishlist: now shows real product image (was emoji-only); handles title/name + missing fields
 - Security: enabled RLS + added policies (order_items, orders, products); created is_admin()
 
-### This session
-- Built ExportBar (date-range filter + CSV download + Print) → wired into admin
-  (sellers/orders/payouts) and seller (orders) dashboards.
-- Admin money summary band (received / owed / commission / paid) + COD-not-collected warning.
-- Added `mrp` column; seller sales/discounts with struck-through price + % OFF on
-  cards and product page.
-- EditProductModal: sellers edit their own products (incl. sale, active toggle, photos).
-- reviews table + RLS (verified-purchase only); StarRating + ProductReviews components;
-  star averages on product cards; review form with stars + comment + up to 4 photos.
-- Fixed: orders buyer column is `buyer_id` (corrected SQL policy + ProductReviews check).
-- Learned: Razorpay live payment fails because account/domain not activated (expected gate).
+### This session — account system + seller KYC + security
+- Buyer ACCOUNT HUB (/account): My Orders, Saved Addresses, My Profile. New `addresses` table.
+- Address book: add/edit/delete/set-default, Home/Work/Other type tag, ⋮ action menu.
+- Profile editing: first/last name (split/joined from profiles.full_name) + phone; email
+  read-only. Sectioned Personal Information / Email / Mobile layout. Skipped gender (extra PII).
+- AccountMenu dropdown added to every buyer nav (Home, Products, ProductDetail, Cart,
+  Wishlist, OrderSuccess). Left OFF Checkout (focus) and Admin (own panel).
+- OrderSuccess now has a "VIEW MY ORDERS" button → /account?tab=orders.
+- Fixed refresh-bounce-to-login on /account: wait for AuthContext `loading` before redirect.
+- SELLER KYC: SellerRegister "Verification" step collects legal name (as on PAN), PAN
+  (format-validated), GST (optional), bank account, IFSC → written to locked-down seller_kyc.
+- SECURITY: closed the sellers-table sensitive-data exposure (see Security section). Confirmed
+  sellers table no longer has bank_account/ifsc_code; seller_kyc holds all sensitive data.
+- Decided NOT to collect Aadhaar (over-sensitive, not needed for payouts).
+
+### Still pending after this session
+- [ ] The 5 legal pages (Privacy, Terms, Refund, Shipping, Grievance) — Razorpay blocker (NOT built)
+- [ ] ₹1 test-priced product "Assam Muga Silk Mekhela Sador by Biki" — set a real price before launch
+- [ ] Optional: seller dashboard "Payout details" tab reading from seller_kyc (sellers can't
+      currently see/edit their saved bank details in the dashboard)
+- [ ] Optional: checkout auto-fill from saved addresses (address book exists but checkout still
+      uses a manual form)
+- [ ] GST-required-or-optional for sellers — confirm with CA (currently optional in the form)
