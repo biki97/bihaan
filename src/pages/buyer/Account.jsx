@@ -56,10 +56,10 @@ export default function Account() {
   const [openMenuId,   setOpenMenuId]   = useState(null)   // which address card's ⋮ menu is open
 
   // Profile state
-  const [profileForm,    setProfileForm]    = useState({ full_name: '', phone: '' })
-  const [editingProfile, setEditingProfile] = useState(false)
-  const [savingProfile,  setSavingProfile]  = useState(false)
-  const [profileSaved,   setProfileSaved]   = useState(false)
+  const [profileForm,   setProfileForm]   = useState({ first_name: '', last_name: '', phone: '' })
+  const [editingName,   setEditingName]   = useState(false)
+  const [editingPhone,  setEditingPhone]  = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -74,20 +74,30 @@ export default function Account() {
       .select('full_name, phone')
       .eq('id', user.id)
       .single()
-    if (data) setProfileForm({ full_name: data.full_name || '', phone: data.phone || '' })
+    if (data) {
+      const parts = (data.full_name || '').trim().split(/\s+/).filter(Boolean)
+      setProfileForm({ first_name: parts[0] || '', last_name: parts.slice(1).join(' '), phone: data.phone || '' })
+    }
   }
 
-  async function saveProfile() {
+  async function saveName() {
     setSavingProfile(true)
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: profileForm.full_name, phone: profileForm.phone })
-        .eq('id', user.id)
-      if (error) { alert('Could not save profile. Please try again.'); return }
-      setEditingProfile(false)
-      setProfileSaved(true)
-      setTimeout(() => setProfileSaved(false), 2500)
+      const full_name = `${profileForm.first_name} ${profileForm.last_name}`.trim()
+      const { error } = await supabase.from('profiles').update({ full_name }).eq('id', user.id)
+      if (error) { alert('Could not save. Please try again.'); return }
+      setEditingName(false)
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function savePhone() {
+    setSavingProfile(true)
+    try {
+      const { error } = await supabase.from('profiles').update({ phone: profileForm.phone }).eq('id', user.id)
+      if (error) { alert('Could not save. Please try again.'); return }
+      setEditingPhone(false)
     } finally {
       setSavingProfile(false)
     }
@@ -179,6 +189,11 @@ export default function Account() {
   const inputStyle = { width: '100%', padding: '10px 12px', border: `1px solid ${S.border}`, background: S.white, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans }
   const labelStyle = { fontSize: '10px', letterSpacing: '.12em', color: S.muted, display: 'block', marginBottom: '5px', fontFamily: S.sans }
   const menuItem   = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '13px', color: S.dark, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }
+  const editLink   = { fontSize: '13px', color: '#2563eb', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans, fontWeight: 600 }
+  const fieldBox   = { width: '100%', padding: '13px 14px', border: `1px solid ${S.border}`, borderRadius: '3px', fontSize: '14px', color: S.dark, outline: 'none', fontFamily: S.sans, background: S.white }
+  const disabledBox = { background: '#faf8f5', color: S.muted }
+  const saveBtn    = { background: S.accent, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans }
+  const cancelBtn  = { background: 'transparent', color: S.muted, padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }
 
   return (
     <div style={{ background: S.bg, minHeight: '100vh', fontFamily: S.sans }}>
@@ -413,53 +428,51 @@ export default function Account() {
 
             {/* PROFILE */}
             {section === 'profile' && (
-              <div style={{ background: S.white, border: `1px solid ${S.border}`, borderRadius: '4px', padding: '24px', maxWidth: '480px' }}>
+              <div style={{ maxWidth: '560px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-                {/* Email (read-only) */}
-                <div style={{ marginBottom: '18px' }}>
-                  <label style={labelStyle}>EMAIL</label>
-                  <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{user?.email || '—'}</p>
-                  <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginTop: '2px' }}>Email is linked to your login and can't be changed here.</p>
+                {/* Personal Information */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                    <h3 style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>Personal Information</h3>
+                    {!editingName && <button onClick={() => setEditingName(true)} style={editLink}>Edit</button>}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px' }}>
+                    <input style={{ ...fieldBox, ...(editingName ? {} : disabledBox) }} value={profileForm.first_name} disabled={!editingName}
+                      onChange={e => setProfileForm({ ...profileForm, first_name: e.target.value })} placeholder="First name" />
+                    <input style={{ ...fieldBox, ...(editingName ? {} : disabledBox) }} value={profileForm.last_name} disabled={!editingName}
+                      onChange={e => setProfileForm({ ...profileForm, last_name: e.target.value })} placeholder="Last name" />
+                  </div>
+                  {editingName && (
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+                      <button onClick={saveName} disabled={savingProfile} style={saveBtn}>{savingProfile ? 'SAVING…' : 'SAVE'}</button>
+                      <button onClick={() => { setEditingName(false); loadProfile() }} style={cancelBtn}>CANCEL</button>
+                    </div>
+                  )}
                 </div>
 
-                {editingProfile ? (
-                  <>
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={labelStyle}>FULL NAME</label>
-                      <input style={inputStyle} value={profileForm.full_name} onChange={e => setProfileForm({ ...profileForm, full_name: e.target.value })} placeholder="Your name" />
+                {/* Email Address */}
+                <div>
+                  <h3 style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark, marginBottom: '14px' }}>Email Address</h3>
+                  <input style={{ ...fieldBox, ...disabledBox, maxWidth: '360px' }} value={user?.email || ''} disabled />
+                  <p style={{ fontSize: '11px', color: S.muted, marginTop: '6px', fontFamily: S.sans }}>Linked to your login — can't be changed here.</p>
+                </div>
+
+                {/* Mobile Number */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                    <h3 style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>Mobile Number</h3>
+                    {!editingPhone && <button onClick={() => setEditingPhone(true)} style={editLink}>Edit</button>}
+                  </div>
+                  <input style={{ ...fieldBox, ...(editingPhone ? {} : disabledBox), maxWidth: '300px' }} value={profileForm.phone} disabled={!editingPhone}
+                    onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="+91 XXXXX XXXXX" />
+                  {editingPhone && (
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+                      <button onClick={savePhone} disabled={savingProfile} style={saveBtn}>{savingProfile ? 'SAVING…' : 'SAVE'}</button>
+                      <button onClick={() => { setEditingPhone(false); loadProfile() }} style={cancelBtn}>CANCEL</button>
                     </div>
-                    <div style={{ marginBottom: '18px' }}>
-                      <label style={labelStyle}>PHONE</label>
-                      <input style={inputStyle} value={profileForm.phone} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} placeholder="+91 XXXXX XXXXX" />
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button onClick={saveProfile} disabled={savingProfile}
-                        style={{ background: S.accent, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: savingProfile ? 'not-allowed' : 'pointer', fontFamily: S.sans }}>
-                        {savingProfile ? 'SAVING…' : 'SAVE CHANGES'}
-                      </button>
-                      <button onClick={() => { setEditingProfile(false); loadProfile() }}
-                        style={{ background: 'transparent', color: S.muted, padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: `1px solid ${S.border}`, cursor: 'pointer', fontFamily: S.sans }}>
-                        CANCEL
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={labelStyle}>FULL NAME</label>
-                      <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{profileForm.full_name || '—'}</p>
-                    </div>
-                    <div style={{ marginBottom: '18px' }}>
-                      <label style={labelStyle}>PHONE</label>
-                      <p style={{ fontSize: '14px', color: S.dark, fontFamily: S.sans }}>{profileForm.phone || '—'}</p>
-                    </div>
-                    <button onClick={() => setEditingProfile(true)}
-                      style={{ background: S.dark, color: '#fff', padding: '10px 22px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-                      EDIT PROFILE
-                    </button>
-                    {profileSaved && <span style={{ marginLeft: '12px', fontSize: '12px', color: '#15803d', fontFamily: S.sans }}>✓ Saved</span>}
-                  </>
-                )}
+                  )}
+                </div>
+
               </div>
             )}
 
