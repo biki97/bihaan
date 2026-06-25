@@ -8,6 +8,7 @@ import Checkout        from './pages/buyer/Checkout'
 import OrderSuccess    from './pages/buyer/OrderSuccess'
 import Wishlist        from './pages/buyer/Wishlist'
 import Account         from './pages/buyer/Account'
+import Legal           from './pages/Legal'
 import SellerRegister  from './pages/seller/SellerRegister'
 import SellerDashboard from './pages/seller/SellerDashboard'
 import AdminDashboard  from './pages/admin/AdminDashboard'
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/order-success"      element={<OrderSuccess />} />
         <Route path="/wishlist"           element={<Wishlist />} />
         <Route path="/account"            element={<Account />} />
+        <Route path="/legal"              element={<Legal />} />
         <Route path="/seller/register"    element={<SellerRegister />} />
         <Route path="/seller/dashboard"   element={<SellerDashboard />} />
         <Route path="/admin"              element={<AdminDashboard />} />

@@ -81,13 +81,26 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
 - src/pages/buyer/Account.jsx — buyer account hub at route /account. Tabs:
   My Orders (real orders by buyer_id), Saved Addresses (full add/edit/delete/default
   with Home/Work/Other type tag + ⋮ menu), My Profile (editable first/last name + phone,
-  read-only email). Reads ?tab= query param to open the right tab. Waits for auth
-  `loading` before redirecting (fixes refresh-bounce-to-login bug).
+  read-only email), and Payout Details (SELLERS ONLY — reads/writes seller_kyc; shows masked
+  PAN + masked bank account (last 4 only), PAN read-only, bank/IFSC/GST editable). Reads
+  ?tab= query param (orders|addresses|profile|payout). Waits for auth `loading` before
+  redirecting (fixes refresh-bounce-to-login bug).
 - src/components/AccountMenu.jsx — nav avatar dropdown (My Profile/Orders/Addresses/
   Wishlist + Seller/Admin links when relevant + Logout). Drop-in, reads user itself.
   Now in the nav of ALL buyer pages: Home, Products, ProductDetail, Cart, Wishlist,
   OrderSuccess. NOT on Checkout (kept distraction-free) or Admin (its own panel).
-- App.jsx: added `import Account` + `<Route path="/account" element={<Account />} />`
+- App.jsx: added `import Account` + `<Route path="/account" element={<Account />} />`,
+  and `import Legal from './pages/Legal'` + `<Route path="/legal" element={<Legal />} />`
+
+### Legal pages (added this session)
+- src/pages/Legal.jsx — ONE page, five sections (Privacy, Terms, Refund & Cancellation,
+  Shipping, Grievance) with a side-menu to switch. Route /legal. Deep-link a section via
+  /legal?section=refund (privacy|terms|refund|shipping|grievance) — useful for Razorpay's form.
+  NOTE: sits directly in src/pages/ (not buyer/), so its imports are `../components/...`.
+  ⚠️ All real details live in the BIZ object at the top + inline [[brackets]]; placeholders are
+  highlighted amber on-page so you can't ship one by accident. NOT legal advice — fill all
+  placeholders + have a lawyer/CA review (esp. Refund + Grievance) before launch. Razorpay
+  needs these live at real URLs on the real domain.
 
 ---
 
@@ -272,11 +285,13 @@ Domain / email:
 - [ ] Change onboarding@resend.dev → orders@bihaan.in in api/send-email.js
 
 Legal pages on site (required by Razorpay + Indian e-commerce law):
-- [ ] Privacy Policy
-- [ ] Terms & Conditions
-- [ ] Refund & Return Policy
-- [ ] Shipping Policy
-- [ ] Grievance Officer (name + email + address)
+- [~] Privacy Policy        — built in src/pages/Legal.jsx (placeholders to fill)
+- [~] Terms & Conditions    — built (placeholders to fill)
+- [~] Refund & Return Policy — built (placeholders to fill)
+- [~] Shipping Policy       — built (placeholders to fill)
+- [~] Grievance Officer     — built; needs real name + email + address
+- [ ] Fill ALL placeholders (BIZ object + [[brackets]]) and get lawyer/CA review
+- [ ] Link /legal from the page footers so buyers + Razorpay reviewer can find it
 
 Technical / security:
 - [ ] Confirm RLS on all tables (sellers, profiles still to verify)
@@ -315,12 +330,19 @@ Technical / security:
 - SECURITY: closed the sellers-table sensitive-data exposure (see Security section). Confirmed
   sellers table no longer has bank_account/ifsc_code; seller_kyc holds all sensitive data.
 - Decided NOT to collect Aadhaar (over-sensitive, not needed for payouts).
+- Seller PAYOUT tab in /account (sellers only): reads/writes seller_kyc, masks PAN + bank
+  account (last 4), PAN read-only, bank/IFSC/GST editable. Decided to put it in /account
+  (seller-only tab) rather than the seller dashboard.
+- LEGAL: built src/pages/Legal.jsx — one page, 5 sections, side menu, /legal route + deep-links.
+  Tailored to Bihaan's managed model, handmade-variation refund caveat, ₹999/₹99/COD shipping,
+  Razorpay-as-processor. All real details are placeholders (BIZ object + [[brackets]]),
+  highlighted amber on-page. Still needs filling + lawyer/CA review before launch.
 
 ### Still pending after this session
-- [ ] The 5 legal pages (Privacy, Terms, Refund, Shipping, Grievance) — Razorpay blocker (NOT built)
+- [ ] Fill the legal-page placeholders (BIZ object + [[brackets]] in Legal.jsx) + lawyer/CA review
+- [ ] Link /legal from page footers (footers still show static ABOUT/ARTISANS/SELL/CONTACT)
 - [ ] ₹1 test-priced product "Assam Muga Silk Mekhela Sador by Biki" — set a real price before launch
-- [ ] Optional: seller dashboard "Payout details" tab reading from seller_kyc (sellers can't
-      currently see/edit their saved bank details in the dashboard)
 - [ ] Optional: checkout auto-fill from saved addresses (address book exists but checkout still
       uses a manual form)
 - [ ] GST-required-or-optional for sellers — confirm with CA (currently optional in the form)
+- [done] Seller payout tab in /account (masked PAN + bank, edit bank/IFSC/GST) — built this session
