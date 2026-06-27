@@ -14,6 +14,21 @@ const S = {
 
 const ADMIN_EMAIL = 'bikidutta319@gmail.com'
 
+// ── Fulfillment helpers ──
+const FULFILL_ALL = ['confirmed', 'packed', 'shipped', 'delivered', 'cancelled']
+function fulfillmentStyle(status) {
+  switch (status) {
+    case 'packed':    return { bg: '#eef3f8', color: '#1d4ed8', border: '#93c5fd', label: 'PACKED' }
+    case 'shipped':   return { bg: '#fef5e7', color: '#92400e', border: '#fcd34d', label: 'SHIPPED' }
+    case 'delivered': return { bg: '#f0fdf4', color: '#15803d', border: '#86efac', label: 'DELIVERED' }
+    case 'cancelled': return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'CANCELLED' }
+    default:          return { bg: '#f3f0eb', color: S.muted, border: S.border, label: 'CONFIRMED' }
+  }
+}
+function fmtDateTime(v) {
+  return v ? new Date(v).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+}
+
 // ── CSV helpers ──
 function csvCell(value) {
   const s = (value === null || value === undefined) ? '' : String(value)
@@ -74,6 +89,18 @@ const SELLER_HEADERS = [
   { label: 'Joined',    value: s => s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN') : '' },
 ]
 
+const FULFILL_HEADERS = [
+  { label: 'Order Date',   value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
+  { label: 'Product',      value: it => it.products?.title },
+  { label: 'Seller',       value: it => it.sellers?.shop_name },
+  { label: 'Qty',          value: it => it.quantity },
+  { label: 'Fulfillment',  value: it => it.fulfillment_status || 'confirmed' },
+  { label: 'Courier',      value: it => it.courier_name },
+  { label: 'Tracking',     value: it => it.tracking_number },
+  { label: 'Shipped At',   value: it => it.shipped_at ? new Date(it.shipped_at).toLocaleString('en-IN') : '' },
+  { label: 'Delivered At', value: it => it.delivered_at ? new Date(it.delivered_at).toLocaleString('en-IN') : '' },
+]
+
 export default function AdminDashboard() {
   const navigate        = useNavigate()
   const { user }        = useAuth()
@@ -86,6 +113,9 @@ export default function AdminDashboard() {
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo,   setDateTo]   = useState('')
+
+  // Fulfillment tab filter
+  const [fulfillFilter, setFulfillFilter] = useState('all')
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -112,7 +142,7 @@ export default function AdminDashboard() {
         *,
         products ( title ),
         sellers ( shop_name, profiles ( email ) ),
-        orders ( status, payment_method, created_at )
+        orders ( status, payment_method, created_at, shipping_address )
       `)
       .order('id', { ascending: false })
 
@@ -142,10 +172,28 @@ export default function AdminDashboard() {
     setSavingId(null)
   }
 
+  // ── Admin override of an item's fulfillment status ──
+  async function overrideFulfillment(it, newStatus) {
+    if (newStatus === (it.fulfillment_status || 'confirmed')) return
+    if (!confirm(`ADMIN OVERRIDE\n\nForce "${it.products?.title || 'item'}" from ${(it.fulfillment_status || 'confirmed').toUpperCase()} to ${newStatus.toUpperCase()}?\n\nThis bypasses the seller. Use only to correct mistakes.`)) return
+    setSavingId(it.id)
+    const patch = { fulfillment_status: newStatus }
+    if (newStatus === 'shipped'   && !it.shipped_at)   patch.shipped_at   = new Date().toISOString()
+    if (newStatus === 'delivered' && !it.delivered_at) patch.delivered_at = new Date().toISOString()
+    await supabase.from('order_items').update(patch).eq('id', it.id)
+    await loadData()
+    setSavingId(null)
+  }
+
   // ── Date-range filtering — lists + CSV + print ──
   const filteredOrders  = filterByDate(orders,  o  => o.created_at,         dateFrom, dateTo)
   const filteredSellers = filterByDate(sellers, s  => s.created_at,         dateFrom, dateTo)
   const filteredItems   = filterByDate(items,   it => it.orders?.created_at, dateFrom, dateTo)
+
+  // Fulfillment list: date-filtered, then status-filtered
+  const fulfillItems = filteredItems.filter(it =>
+    fulfillFilter === 'all' ? true : (it.fulfillment_status || 'confirmed') === fulfillFilter
+  )
 
   const rangeLabel = (dateFrom || dateTo)
     ? `Date range: ${dateFrom || 'beginning'} → ${dateTo || 'today'}`
@@ -171,9 +219,13 @@ export default function AdminDashboard() {
   }
   function printSellers() { printTable('Bihaan — Sellers', SELLER_HEADERS, filteredSellers, rangeLabel) }
 
+  function downloadFulfill() {
+    if (fulfillItems.length === 0) { alert('No items in this view'); return }
+    downloadCSV(`bihaan-fulfillment-${today}.csv`, FULFILL_HEADERS, fulfillItems)
+  }
+  function printFulfill() { printTable('Bihaan — Fulfillment', FULFILL_HEADERS, fulfillItems, rangeLabel) }
+
   // ── Money summary (all-time, independent of the date filter) ──
-  // "Collected" = money actually in your account: online orders that are paid,
-  // and COD orders where the cash has been received (not still cod_pending).
   const isCollected = o =>
     o.payment_method === 'cod' ? o.status !== 'cod_pending' : o.status === 'paid'
 
@@ -218,6 +270,9 @@ export default function AdminDashboard() {
   const payoutList = Object.values(payoutGroups).sort((a, b) => b.pendingAmount - a.pendingAmount)
   const totalPending = payoutList.reduce((s, g) => s + g.pendingAmount, 0)
   const totalPayoutGroups = new Set(items.map(it => it.seller_id || 'unassigned')).size
+
+  // Count of items needing attention (not delivered/cancelled)
+  const activeFulfillCount = items.filter(it => !['delivered', 'cancelled'].includes(it.fulfillment_status || 'confirmed')).length
 
   if (loading) return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -298,11 +353,12 @@ export default function AdminDashboard() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '2px', marginBottom: '28px', borderBottom: `1px solid ${S.border}` }}>
+        <div style={{ display: 'flex', gap: '2px', marginBottom: '28px', borderBottom: `1px solid ${S.border}`, flexWrap: 'wrap' }}>
           {[
             ['sellers', `SELLERS (${sellers.length})`],
             ['orders',  `ORDERS (${orders.length})`],
             ['payouts', `PAYOUTS (₹${Math.round(totalPending).toLocaleString()} due)`],
+            ['fulfillment', `FULFILLMENT (${activeFulfillCount} active)`],
           ].map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
               style={{ padding: '10px 20px', fontSize: '11px', letterSpacing: '.1em', border: 'none', cursor: 'pointer', fontFamily: S.sans, background: 'transparent', color: tab === t ? S.accent : S.muted, borderBottom: tab === t ? `2px solid ${S.accent}` : '2px solid transparent', marginBottom: '-1px' }}>
@@ -466,6 +522,80 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Fulfillment tab — monitor + override every seller's order items */}
+        {tab === 'fulfillment' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <ExportBar
+              from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
+              onDownload={downloadFulfill} onPrint={printFulfill}
+              count={fulfillItems.length} total={items.length} downloadLabel="DOWNLOAD CSV" />
+
+            {/* status filter chips */}
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
+              {['all', ...FULFILL_ALL].map(f => (
+                <button key={f} onClick={() => setFulfillFilter(f)}
+                  style={{ padding: '6px 12px', fontSize: '11px', letterSpacing: '.05em', fontFamily: S.sans, cursor: 'pointer', borderRadius: '3px', border: `1px solid ${fulfillFilter === f ? S.accent : S.border}`, background: fulfillFilter === f ? '#fef9f7' : S.white, color: fulfillFilter === f ? S.accent : S.muted }}>
+                  {f === 'all' ? 'ALL' : f.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ background: '#eef3f8', border: `1px solid ${S.border}`, borderLeft: `3px solid ${S.dark}`, padding: '12px 16px', borderRadius: '3px' }}>
+              <p style={{ fontSize: '12px', color: S.dark, fontFamily: S.sans, lineHeight: 1.6 }}>
+                Oversight view of every seller's items. Sellers normally advance their own status — use the override dropdown only to correct a mistake or step in for an unresponsive seller. Overrides are logged by the shipped/delivered timestamps.
+              </p>
+            </div>
+
+            {items.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <p style={{ fontFamily: S.serif, fontSize: '1.2rem', color: S.dark }}>No order items yet</p>
+              </div>
+            ) : fulfillItems.length === 0 ? noneInRange('items') : fulfillItems.map(it => {
+              const fs = it.fulfillment_status || 'confirmed'
+              const st = fulfillmentStyle(fs)
+              const addr = parseAddress(it.orders?.shipping_address)
+              return (
+                <div key={it.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '18px 20px', borderRadius: '3px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '220px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                        <p style={{ fontFamily: S.serif, fontSize: '1rem', color: S.dark }}>{it.products?.title || 'Product'}</p>
+                        <span style={{ fontSize: '10px', letterSpacing: '.08em', padding: '2px 8px', fontFamily: S.sans, background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>{st.label}</span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginBottom: '2px' }}>
+                        Seller: <strong style={{ color: S.dark }}>{it.sellers?.shop_name || '—'}</strong> · Qty {it.quantity}
+                        {it.orders?.created_at && <> · {new Date(it.orders.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</>}
+                      </p>
+                      <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>
+                        Buyer: {addr.name || '—'} {addr.phone ? `· ${addr.phone}` : ''}
+                      </p>
+                      {it.tracking_number && (
+                        <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginTop: '4px' }}>
+                          {it.courier_name} · {it.tracking_number}
+                          {it.tracking_url && <> · <a href={it.tracking_url} target="_blank" rel="noreferrer" style={{ color: S.accent }}>Track</a></>}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '11px', color: S.muted, fontFamily: S.sans, marginTop: '6px' }}>
+                        Shipped: {fmtDateTime(it.shipped_at)} · Delivered: {fmtDateTime(it.delivered_at)}
+                      </p>
+                    </div>
+
+                    {/* Admin override */}
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: '9px', letterSpacing: '.12em', color: S.muted, fontFamily: S.sans, marginBottom: '4px' }}>ADMIN OVERRIDE</p>
+                      <select value={fs} disabled={savingId === it.id}
+                        onChange={e => overrideFulfillment(it, e.target.value)}
+                        style={{ padding: '8px 10px', fontSize: '12px', border: `1px solid ${S.border}`, background: S.white, color: S.dark, fontFamily: S.sans, cursor: 'pointer' }}>
+                        {FULFILL_ALL.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

@@ -56,12 +56,26 @@ function parseAddress(raw) {
   }
 }
 
+// ── Fulfillment helpers ──
+const FULFILL_STEPS = ['confirmed', 'packed', 'shipped', 'delivered']
+function fulfillmentStyle(status) {
+  switch (status) {
+    case 'packed':    return { bg: '#eef3f8', color: '#1d4ed8', border: '#93c5fd', label: 'PACKED' }
+    case 'shipped':   return { bg: '#fef5e7', color: '#92400e', border: '#fcd34d', label: 'SHIPPED' }
+    case 'delivered': return { bg: '#f0fdf4', color: '#15803d', border: '#86efac', label: 'DELIVERED' }
+    case 'cancelled': return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'CANCELLED' }
+    default:          return { bg: '#f3f0eb', color: S.muted, border: S.border, label: 'CONFIRMED' }
+  }
+}
+
 // ── Column definitions for this seller's orders (CSV + print) ──
 const MY_ORDER_HEADERS = [
   { label: 'Order Date',       value: it => it.orders?.created_at ? new Date(it.orders.created_at).toLocaleString('en-IN') : '' },
   { label: 'Product',          value: it => it.products?.title },
   { label: 'Qty',              value: it => it.quantity },
   { label: 'Your Earning (₹)', value: it => it.seller_amount },
+  { label: 'Fulfillment',      value: it => it.fulfillment_status || 'confirmed' },
+  { label: 'Tracking',         value: it => it.tracking_number },
   { label: 'Status',           value: it => it.orders?.status },
   { label: 'Payment',          value: it => it.orders?.payment_method || 'online' },
   { label: 'Buyer Name',       value: it => parseAddress(it.orders?.shipping_address).name },
@@ -170,6 +184,10 @@ export default function SellerDashboard() {
   // Which product is being edited (null = modal closed)
   const [editingProduct, setEditingProduct] = useState(null)
 
+  // Fulfillment: which item is entering tracking, and the tracking inputs
+  const [shippingItemId, setShippingItemId] = useState(null)
+  const [trackingForm,   setTrackingForm]   = useState({ courier_name: '', tracking_number: '', tracking_url: '' })
+
   const [aiInputs, setAiInputs] = useState({
     artisanName: '', village: '', state: '',
     experience: '', productName: '', category: '',
@@ -225,6 +243,39 @@ export default function SellerDashboard() {
   }
   function printMyOrders() {
     printTable('My Orders — Bihaan', MY_ORDER_HEADERS, filteredOrders, rangeLabel)
+  }
+
+  // ── Fulfillment actions (sellers update only their own items via RLS) ──
+  async function updateFulfillment(itemId, patch) {
+    const { error } = await supabase.from('order_items').update(patch).eq('id', itemId)
+    if (error) { alert('Could not update order: ' + error.message); return }
+    await loadData()
+  }
+  function markPacked(it) {
+    updateFulfillment(it.id, { fulfillment_status: 'packed' })
+  }
+  function startShipping(it) {
+    setTrackingForm({ courier_name: it.courier_name || '', tracking_number: it.tracking_number || '', tracking_url: it.tracking_url || '' })
+    setShippingItemId(it.id)
+  }
+  async function confirmShipped(it) {
+    if (!trackingForm.courier_name || !trackingForm.tracking_number) {
+      alert('Please enter the courier name and tracking number.')
+      return
+    }
+    await updateFulfillment(it.id, {
+      fulfillment_status: 'shipped',
+      courier_name:    trackingForm.courier_name,
+      tracking_number: trackingForm.tracking_number,
+      tracking_url:    trackingForm.tracking_url || null,
+      shipped_at:      new Date().toISOString(),
+    })
+    setShippingItemId(null)
+    setTrackingForm({ courier_name: '', tracking_number: '', tracking_url: '' })
+  }
+  function markDelivered(it) {
+    if (!confirm('Confirm this item has been delivered to the buyer?')) return
+    updateFulfillment(it.id, { fulfillment_status: 'delivered', delivered_at: new Date().toISOString() })
   }
 
   async function handleImageUpload(e) {
@@ -314,6 +365,9 @@ export default function SellerDashboard() {
   function handleProductInput(e) {
     setProductForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
+
+  const actionBtn  = { background: S.accent, color: '#fff', padding: '7px 14px', fontSize: '10px', letterSpacing: '.08em', border: 'none', cursor: 'pointer', fontFamily: S.sans }
+  const trackInput = { padding: '9px 11px', border: `1px solid ${S.border}`, background: S.white, fontSize: '13px', color: S.dark, outline: 'none', fontFamily: S.sans, width: '100%' }
 
   if (loading) return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: S.sans }}>
@@ -650,6 +704,9 @@ export default function SellerDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {filteredOrders.map(it => {
                       const addr = parseAddress(it.orders?.shipping_address)
+                      const fs = it.fulfillment_status || 'confirmed'
+                      const st = fulfillmentStyle(fs)
+                      const stepIdx = FULFILL_STEPS.indexOf(fs)
                       return (
                         <div key={it.id} style={{ background: S.white, border: `1px solid ${S.border}`, padding: '20px', borderRadius: '3px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
@@ -676,6 +733,63 @@ export default function SellerDashboard() {
                             <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>
                               {[addr.address, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')}
                             </p>
+                          </div>
+
+                          {/* Fulfillment status + actions */}
+                          <div style={{ marginTop: '12px', borderTop: `1px solid ${S.border}`, paddingTop: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '10px', letterSpacing: '.08em', padding: '3px 9px', fontFamily: S.sans, background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>{st.label}</span>
+                                {fs !== 'cancelled' && (
+                                  <span style={{ fontSize: '11px', fontFamily: S.sans }}>
+                                    {FULFILL_STEPS.map((s, i) => (
+                                      <span key={s} style={{ color: stepIdx >= i ? S.accent : S.border }}>
+                                        {i > 0 ? ' → ' : ''}{s}
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                              </div>
+
+                              {fs === 'cancelled' ? (
+                                <span style={{ fontSize: '11px', color: '#b91c1c', fontFamily: S.sans }}>Cancelled by buyer</span>
+                              ) : fs === 'delivered' ? (
+                                <span style={{ fontSize: '11px', color: '#15803d', fontFamily: S.sans }}>✓ Delivered{it.delivered_at ? ` · ${new Date(it.delivered_at).toLocaleDateString('en-IN')}` : ''}</span>
+                              ) : fs === 'shipped' ? (
+                                <button onClick={() => markDelivered(it)} style={actionBtn}>MARK AS DELIVERED</button>
+                              ) : fs === 'packed' ? (
+                                <button onClick={() => startShipping(it)} style={actionBtn}>MARK AS SHIPPED</button>
+                              ) : (
+                                <button onClick={() => markPacked(it)} style={actionBtn}>MARK AS PACKED</button>
+                              )}
+                            </div>
+
+                            {/* Tracking input form when shipping */}
+                            {shippingItemId === it.id && (
+                              <div style={{ marginTop: '12px', background: S.bg, border: `1px solid ${S.border}`, borderRadius: '3px', padding: '14px' }}>
+                                <p style={{ fontSize: '10px', letterSpacing: '.12em', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>SHIPPING DETAILS</p>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                                  <input value={trackingForm.courier_name} onChange={e => setTrackingForm({ ...trackingForm, courier_name: e.target.value })}
+                                    placeholder="Courier (e.g. India Post, Delhivery)" style={trackInput} />
+                                  <input value={trackingForm.tracking_number} onChange={e => setTrackingForm({ ...trackingForm, tracking_number: e.target.value })}
+                                    placeholder="Tracking number" style={trackInput} />
+                                </div>
+                                <input value={trackingForm.tracking_url} onChange={e => setTrackingForm({ ...trackingForm, tracking_url: e.target.value })}
+                                  placeholder="Tracking link (optional, e.g. https://...)" style={{ ...trackInput, marginBottom: '10px' }} />
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={() => confirmShipped(it)} style={actionBtn}>CONFIRM SHIPPED</button>
+                                  <button onClick={() => setShippingItemId(null)} style={{ ...actionBtn, background: 'transparent', color: S.muted, border: `1px solid ${S.border}` }}>CANCEL</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Show tracking once shipped/delivered */}
+                            {(fs === 'shipped' || fs === 'delivered') && it.tracking_number && shippingItemId !== it.id && (
+                              <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginTop: '8px' }}>
+                                {it.courier_name} · {it.tracking_number}
+                                {it.tracking_url && <> · <a href={it.tracking_url} target="_blank" rel="noreferrer" style={{ color: S.accent }}>Track</a></>}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )
