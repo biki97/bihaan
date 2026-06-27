@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { useCart }     from '../../context/CartContext'
@@ -46,6 +46,45 @@ export default function Checkout() {
     name: '', phone: '', address: '',
     city: '', state: '', pincode: ''
   })
+
+  // Saved addresses (auto-fill)
+  const [savedAddresses, setSavedAddresses] = useState([])
+  const [selectedAddrId, setSelectedAddrId] = useState(null)
+
+  useEffect(() => {
+    if (!user) return
+    loadAddresses()
+  }, [user])
+
+  async function loadAddresses() {
+    const { data } = await supabase
+      .from('addresses')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('is_default', { ascending: false })
+    const list = data || []
+    setSavedAddresses(list)
+    // Pre-select the default (or first) address so the form is ready to go
+    const preferred = list.find(a => a.is_default) || list[0]
+    if (preferred) selectAddress(preferred)
+  }
+
+  function selectAddress(a) {
+    setSelectedAddrId(a.id)
+    setForm({
+      name:    a.name    || '',
+      phone:   a.phone   || '',
+      address: a.address || '',
+      city:    a.city    || '',
+      state:   a.state   || '',
+      pincode: a.pincode || '',
+    })
+  }
+
+  function useNewAddress() {
+    setSelectedAddrId(null)
+    setForm({ name: '', phone: '', address: '', city: '', state: '', pincode: '' })
+  }
 
   const shipping     = totalAmount >= 999 ? 0 : 99
   // COD only allowed at/under the limit
@@ -256,6 +295,41 @@ export default function Checkout() {
           <h2 style={{ fontFamily: S.serif, fontSize: '1.6rem', fontWeight: 400, color: S.dark, marginBottom: '24px' }}>
             Delivery details
           </h2>
+
+          {/* Saved addresses — auto-fill (only for logged-in buyers who have some) */}
+          {user && savedAddresses.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <p style={{ fontSize: '10px', letterSpacing: '.15em', color: S.muted, marginBottom: '10px', fontFamily: S.sans }}>SAVED ADDRESSES</p>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
+                {savedAddresses.map(a => {
+                  const selected = selectedAddrId === a.id
+                  return (
+                    <div key={a.id} onClick={() => selectAddress(a)}
+                      style={{ border: `1px solid ${selected ? S.accent : S.border}`, background: selected ? '#fef9f7' : S.white, borderRadius: '4px', padding: '12px 14px', cursor: 'pointer', position: 'relative' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '10px', letterSpacing: '.08em', color: selected ? S.accent : S.muted, fontFamily: S.sans, fontWeight: 600 }}>{(a.label || 'ADDRESS').toUpperCase()}</span>
+                        {a.is_default && <span style={{ fontSize: '9px', color: '#15803d', background: '#f0fdf4', border: '1px solid #86efac', padding: '1px 6px', fontFamily: S.sans }}>DEFAULT</span>}
+                        {selected && <span style={{ marginLeft: 'auto', fontSize: '12px', color: S.accent }}>✓</span>}
+                      </div>
+                      <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, marginBottom: '2px' }}>{a.name} · {a.phone}</p>
+                      <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, lineHeight: 1.5 }}>
+                        {[a.address, a.city, a.state, a.pincode].filter(Boolean).join(', ')}
+                      </p>
+                    </div>
+                  )
+                })}
+
+                {/* New address option */}
+                <div onClick={useNewAddress}
+                  style={{ border: `1px dashed ${selectedAddrId === null ? S.accent : S.border}`, background: selectedAddrId === null ? '#fef9f7' : S.white, borderRadius: '4px', padding: '12px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '64px' }}>
+                  <span style={{ fontSize: '12px', color: selectedAddrId === null ? S.accent : S.muted, fontFamily: S.sans, letterSpacing: '.05em' }}>+ ENTER A NEW ADDRESS</span>
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: S.muted, marginTop: '8px', fontFamily: S.sans }}>
+                Pick one to fill the form below — you can still edit any field.
+              </p>
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
