@@ -221,7 +221,7 @@ export default function SellerDashboard() {
       .select(`
         *,
         products ( title ),
-        orders ( created_at, status, payment_method, total_amount, shipping_address )
+        orders ( created_at, status, payment_method, total_amount, shipping_address, buyer_email )
       `)
       .eq('seller_id', sellerData.id)
       .order('id', { ascending: false })
@@ -251,6 +251,34 @@ export default function SellerDashboard() {
     if (error) { alert('Could not update order: ' + error.message); return }
     await loadData()
   }
+
+  // Notify the buyer by email on status change. Fails silently (email is best-effort,
+  // and only delivers once the Resend domain is verified). Skips if no buyer email on file.
+  async function notifyBuyer(type, it, extra = {}) {
+    const email = it.orders?.buyer_email
+    if (!email) return
+    const addr = parseAddress(it.orders?.shipping_address)
+    try {
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          buyerEmail: email,
+          buyerName:  addr.name || '',
+          shipment: {
+            shopName:    seller?.shop_name || '',
+            items:       [{ name: it.products?.title || 'Item', qty: it.quantity, price: Number(it.price) || 0 }],
+            courier:     extra.courier     || it.courier_name    || '',
+            tracking:    extra.tracking    || it.tracking_number || '',
+            trackingUrl: extra.trackingUrl || it.tracking_url    || '',
+          },
+        }),
+      })
+    } catch (e) {
+      console.log('Notification email failed silently:', e)
+    }
+  }
   function markPacked(it) {
     updateFulfillment(it.id, { fulfillment_status: 'packed' })
   }
@@ -263,6 +291,11 @@ export default function SellerDashboard() {
       alert('Please enter the courier name and tracking number.')
       return
     }
+    const shipInfo = {
+      courier:     trackingForm.courier_name,
+      tracking:    trackingForm.tracking_number,
+      trackingUrl: trackingForm.tracking_url,
+    }
     await updateFulfillment(it.id, {
       fulfillment_status: 'shipped',
       courier_name:    trackingForm.courier_name,
@@ -270,12 +303,14 @@ export default function SellerDashboard() {
       tracking_url:    trackingForm.tracking_url || null,
       shipped_at:      new Date().toISOString(),
     })
+    notifyBuyer('order_shipped', it, shipInfo)
     setShippingItemId(null)
     setTrackingForm({ courier_name: '', tracking_number: '', tracking_url: '' })
   }
   function markDelivered(it) {
     if (!confirm('Confirm this item has been delivered to the buyer?')) return
     updateFulfillment(it.id, { fulfillment_status: 'delivered', delivered_at: new Date().toISOString() })
+    notifyBuyer('order_delivered', it)
   }
 
   async function handleImageUpload(e) {

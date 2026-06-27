@@ -111,6 +111,7 @@ export default function Checkout() {
       .from('orders')
       .insert({
         buyer_id:            user?.id,
+        buyer_email:         user?.email || null,
         total_amount:        total,
         status:              status,            // 'paid' for online, 'cod_pending' for COD
         payment_method:      method,            // 'online' | 'cod'
