@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthContext'
 import Logo from '../../components/Logo'
+import SellerPayoutPolicy from '../../components/SellerPayoutPolicy'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -426,6 +427,9 @@ export default function SellerRegister() {
               <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans, marginTop: '-8px' }}>
                 Required to verify you and to send your earnings. These details are private.
               </p>
+
+              {/* Clear, upfront promise of how/when the seller gets paid */}
+              <SellerPayoutPolicy />
 
               <div>
                 <label style={labelStyle}>FULL LEGAL NAME (as on PAN) *</label>
