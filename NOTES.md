@@ -61,8 +61,11 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
 - src/context/WishlistContext.jsx — wishlist (localStorage, persists without login)
 - src/context/CurrencyContext.jsx — live rates via open.er-api.com, 24hr cache
 - src/hooks/useIsMobile.js — responsive breakpoint hook (used in all buyer pages)
-- src/pages/admin/AdminDashboard.jsx — admin panel (sellers, orders, payouts, money summary)
-- src/pages/seller/SellerDashboard.jsx — seller panel (products, add, orders)
+- src/pages/admin/AdminDashboard.jsx — admin panel (sellers, orders, payouts, money summary,
+  + FULFILLMENT tab: monitor every seller's order items with status/tracking/timestamps,
+  status filter chips, and an admin-override dropdown to force any status via is_admin())
+- src/pages/seller/SellerDashboard.jsx — seller panel (products, add, orders). Orders tab has
+  fulfillment controls: advance own items confirmed→packed→shipped(+tracking)→delivered
 - src/pages/buyer/Products.jsx — product listing
 - src/pages/buyer/ProductDetail.jsx — single product page
 - src/pages/buyer/Checkout.jsx — checkout + saves order_items with seller split
@@ -85,6 +88,10 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
   PAN + masked bank account (last 4 only), PAN read-only, bank/IFSC/GST editable). Reads
   ?tab= query param (orders|addresses|profile|payout). Waits for auth `loading` before
   redirecting (fixes refresh-bounce-to-login bug).
+  ORDER-LIFECYCLE update: My Orders tab now groups each order's items by seller into
+  "shipments" — each shows a Confirmed→Packed→Shipped→Delivered progress tracker, courier +
+  tracking link once shipped, and a "Cancel this shipment" button (calls cancel_my_order_item)
+  that disappears after it ships. Multi-shipment orders show "SHIPMENT N OF M · sellerName".
 - src/components/AccountMenu.jsx — nav avatar dropdown (My Profile/Orders/Addresses/
   Wishlist + Seller/Admin links when relevant + Logout). Drop-in, reads user itself.
   Now in the nav of ALL buyer pages: Home, Products, ProductDetail, Cart, Wishlist,
@@ -133,6 +140,20 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
   "sellers update own" RLS — a seller can only edit their own products.
 - Customer REVIEWS: verified-purchase only, stars + written comment + up to 4 buyer photos.
   Average rating shows on product cards (Products.jsx) and on the product page.
+
+### ORDER LIFECYCLE (multi-seller fulfillment — added this session)
+[DECISION] Went with multi-seller orders (Option B): one cart/checkout/shipping fee, buyer
+can mix sellers; behind the scenes each seller's items = a separate "shipment" with its own
+status + tracking. Fulfillment unit = order_items grouped by seller. Checkout was ALREADY
+multi-seller-ready (inserts one order_item per cart line with its own seller_id) — no change.
+Status flow: confirmed → packed → shipped → delivered (+ cancelled). Who does what:
+- SELLER advances ONLY their own items (SellerDashboard Orders tab), adds courier+tracking
+  at "shipped". Stamps shipped_at / delivered_at automatically.
+- BUYER can ONLY cancel, and only before shipped, via cancel_my_order_item() — never sets
+  delivered. Sees per-seller shipments with a progress tracker + tracking link in My Orders.
+- ADMIN monitors everything (AdminDashboard Fulfillment tab) with timestamps, and can OVERRIDE
+  any item's status (is_admin() policy) — the oversight lever for an unresponsive/dishonest seller.
+Refunds on cancel are MANUAL for now (payments not live). Built in 4 steps: DB → seller → admin → buyer.
 
 ### Not done yet / known gaps
 - Home page (Home.jsx) does NOT show sale badges yet (never modified this session).
@@ -190,7 +211,12 @@ breaks. If a feature works locally but not live, a missing Vercel env var is why
 ### Tables of note
 - products — has an `mrp` column (numeric, nullable) for sale display
 - orders — buyer column is `buyer_id` (NOT user_id) — important for any order ownership check
-- order_items — product_id, seller_id, seller_amount, platform_amount, payout_status, quantity
+- order_items — product_id, seller_id, seller_amount, platform_amount, payout_status, quantity.
+  FULFILLMENT cols (added for order-lifecycle): fulfillment_status (default 'confirmed';
+  values confirmed|packed|shipped|delivered|cancelled), tracking_number, courier_name,
+  tracking_url, shipped_at(timestamptz), delivered_at(timestamptz). Fulfillment lives HERE
+  (per line / per seller), NOT on orders — because one order can contain multiple sellers'
+  items, each shipped separately. orders.status stays payment-only ('paid'|'cod_pending').
 - reviews — id, product_id, user_id, rating(1–5), comment, images(text[]), created_at
   - one review per (product_id, user_id); RLS: public read, verified-buyer insert, own update/delete
   - verified-purchase check joins order_items → orders on o.buyer_id = auth.uid()
@@ -220,8 +246,13 @@ expected. Test on the LIVE site logged in as admin. If admin check ever fails on
 switch to the `auth.jwt() ->> 'email'` version.
 
 #### RLS status
-- order_items — RLS ON. Policies: authenticated insert, admin read, admin update (mark paid),
-  AND "buyers view own order items" (select where the parent order's buyer_id = auth.uid()) ✓
+- order_items — RLS ON. Policies: authenticated insert, admin read, admin update (mark paid
+  + fulfillment override), "buyers view own order items" (select where parent order's
+  buyer_id = auth.uid()), "sellers read own order items" (select where seller_id maps to
+  their sellers row), AND "sellers update own order items" (update where seller_id maps to
+  their sellers row — lets a seller advance fulfillment_status + tracking on ONLY their items).
+  NOTE: there is deliberately NO general buyer-update policy. Buyers cancel via a locked
+  function instead (see cancel_my_order_item below), so they can't set 'delivered' via the API. ✓
 - orders — RLS ON. Policies: admin view all, authenticated create, users view own
 - products — RLS ON. Policies: anyone view active, sellers insert, sellers update own
 - reviews — RLS ON. Policies: public read, verified-buyer insert, own update, own delete
@@ -231,6 +262,14 @@ switch to the `auth.jwt() ->> 'email'` version.
   Safe because sensitive columns were moved out to seller_kyc.
 - profiles — has "users update own profile" policy ✓ (confirmed when building profile editing).
   Still worth confirming the full read policy set.
+
+### Database function — cancel_my_order_item(item_id uuid)
+Security-definer function (created for order-lifecycle). The ONLY way a buyer can modify an
+order_item. Checks: caller is the order's buyer AND fulfillment_status is 'confirmed' or
+'packed' (can't cancel once shipped). If ok: sets fulfillment_status='cancelled' and restores
+product stock (products.stock + quantity). Granted execute to authenticated. Called from the
+buyer Account page via supabase.rpc('cancel_my_order_item', { item_id }). Refund is MANUAL
+(payments not live yet) — UI says so honestly.
 
 ### TODO security
 - [x] Add buyer "view own order items" SELECT policy (done — account orders page uses it)
@@ -338,6 +377,23 @@ Technical / security:
   Razorpay-as-processor. All real details are placeholders (BIZ object + [[brackets]]),
   highlighted amber on-page. Still needs filling + lawyer/CA review before launch.
 
+### This session (continued) — ORDER LIFECYCLE (multi-seller fulfillment)
+- DB: added fulfillment_status/tracking_number/courier_name/tracking_url/shipped_at/delivered_at
+  to order_items; "sellers update own order items" UPDATE policy; dropped the too-broad
+  buyers-update policy; created cancel_my_order_item() security-definer function (buyer cancel
+  only, only before shipped, restores stock). All ran clean.
+- Seller (SellerDashboard Orders tab): per-item fulfillment badge + step trail + action buttons
+  (Packed → Shipped w/ inline courier+tracking form → Delivered). Tracking shows with Track link.
+  Added Fulfillment + Tracking to CSV.
+- Admin (AdminDashboard): new FULFILLMENT tab — all sellers' items, status filter chips,
+  shipped/delivered timestamps, admin-override status dropdown (is_admin()). Existing tabs untouched.
+- Buyer (Account My Orders): items grouped by seller into shipments, each with a
+  Confirmed→Packed→Shipped→Delivered tracker, tracking link, and cancel-before-shipped button.
+  This Account.jsx supersedes the payout-tab version (has BOTH payout tab AND shipment view).
+- [DECISION] Chose multi-seller (Option B) over single-seller-per-order: better buyer experience
+  (one shipping fee, mix sellers), at the cost of harder ops (split shipments/payouts). Built so
+  fulfillment is per-seller-within-order.
+
 ### Still pending after this session
 - [ ] Fill the legal-page placeholders (BIZ object + [[brackets]] in Legal.jsx) + lawyer/CA review
 - [ ] Link /legal from page footers (footers still show static ABOUT/ARTISANS/SELL/CONTACT)
@@ -346,3 +402,8 @@ Technical / security:
       uses a manual form)
 - [ ] GST-required-or-optional for sellers — confirm with CA (currently optional in the form)
 - [done] Seller payout tab in /account (masked PAN + bank, edit bank/IFSC/GST) — built this session
+- [done] ORDER LIFECYCLE (multi-seller): seller advances status+tracking, admin oversight+override,
+  buyer shipment view + cancel. DB + all 3 UIs built this session.
+- [ ] TEST the full lifecycle: place a COD order → seller marks packed/shipped/delivered →
+  check admin Fulfillment tab + buyer shipment view + try a cancel (confirm stock restores).
+  (COD path works without Razorpay; this is the realistic pre-payments test.)

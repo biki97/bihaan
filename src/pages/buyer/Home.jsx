@@ -7,6 +7,7 @@ import { useCart }     from '../../context/CartContext'
 import { useWishlist } from '../../context/WishlistContext'
 import { useCurrency } from '../../context/CurrencyContext'
 import AccountMenu from '../../components/AccountMenu'
+import Footer from '../../components/Footer'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -390,15 +391,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: isMobile ? '16px' : '28px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontFamily: S.serif, fontSize: '17px', color: S.accent, fontWeight: 600 }}>Bihaan</div>
-        <div style={{ display: 'flex', gap: '20px' }}>
-          {['ABOUT','ARTISANS','SELL','CONTACT'].map(l => (
-            <span key={l} style={{ fontSize: '11px', letterSpacing: '.1em', color: S.muted, cursor: 'pointer', fontFamily: S.sans }}>{l}</span>
-          ))}
-        </div>
-        <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>© 2026 BIHAAN · NORTHEAST INDIA</p>
-      </footer>
+      <Footer />
     </div>
   )
 }

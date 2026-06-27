@@ -5,6 +5,7 @@ import { useCart }     from '../../context/CartContext'
 import { useWishlist } from '../../context/WishlistContext'
 import { useCurrency } from '../../context/CurrencyContext'
 import AccountMenu from '../../components/AccountMenu'
+import Footer from '../../components/Footer'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -99,6 +100,7 @@ export default function OrderSuccess() {
         </div>
       </div>
 
+      <Footer />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import Logo from '../../components/Logo'
+import Footer from '../../components/Footer'
 
 const S = {
   bg: '#f8f4ef', white: '#ffffff', dark: '#1a1208',
@@ -307,12 +308,7 @@ export default function Login() {
         </div>
       </div>
 
-      <footer style={{ background: S.white, borderTop: `1px solid ${S.border}`, padding: '20px 40px', textAlign: 'center' }}>
-        <p style={{ fontSize: '11px', color: '#b0a498', letterSpacing: '.05em', fontFamily: S.sans }}>
-          © 2026 BIHAAN · NORTHEAST INDIA
-        </p>
-      </footer>
-
+      <Footer />
     </div>
   )
 }
