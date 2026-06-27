@@ -43,6 +43,31 @@ function maskTail(value, visible = 4) {
   return '•'.repeat(Math.max(4, s.length - visible)) + s.slice(-visible)
 }
 
+// Buyer-facing fulfillment progress
+const SHIP_STEPS = [
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'packed',    label: 'Packed' },
+  { key: 'shipped',   label: 'Shipped' },
+  { key: 'delivered', label: 'Delivered' },
+]
+function shipStyle(status) {
+  if (status === 'delivered') return { color: '#15803d', label: 'Delivered' }
+  if (status === 'shipped')   return { color: '#92400e', label: 'Shipped' }
+  if (status === 'packed')    return { color: '#1d4ed8', label: 'Packed' }
+  if (status === 'cancelled') return { color: '#b91c1c', label: 'Cancelled' }
+  return { color: '#7a6e62', label: 'Confirmed' }
+}
+// Group an order's items by seller into "shipments"
+function groupBySeller(items) {
+  const groups = {}
+  for (const it of (items || [])) {
+    const key = it.seller_id || 'unassigned'
+    if (!groups[key]) groups[key] = { sellerName: it.sellers?.shop_name || 'Bihaan seller', items: [] }
+    groups[key].items.push(it)
+  }
+  return Object.values(groups)
+}
+
 export default function Account() {
   const isMobile = useIsMobile()
   const navigate = useNavigate()
@@ -162,14 +187,24 @@ export default function Account() {
       .select(`
         *,
         order_items (
-          quantity, seller_amount, platform_amount,
-          products ( title, images )
+          id, quantity, seller_amount, platform_amount, seller_id,
+          fulfillment_status, tracking_number, courier_name, tracking_url,
+          shipped_at, delivered_at,
+          products ( title, images ),
+          sellers ( shop_name )
         )
       `)
       .eq('buyer_id', user.id)
       .order('created_at', { ascending: false })
     setOrders(data || [])
     setLoading(false)
+  }
+
+  async function cancelItem(itemId) {
+    if (!confirm('Cancel this item? It will be removed from your order. If you paid online, a refund is processed manually by the Bihaan team.')) return
+    const { error } = await supabase.rpc('cancel_my_order_item', { item_id: itemId })
+    if (error) { alert('Could not cancel: ' + error.message); return }
+    await loadOrders()
   }
 
   async function loadAddresses() {
@@ -328,24 +363,93 @@ export default function Account() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: `1px solid ${S.border}`, paddingTop: '12px' }}>
-                          {(o.order_items || []).map((it, i) => {
-                            const img = it.products?.images?.[0]
-                            const line = (Number(it.seller_amount) || 0) + (Number(it.platform_amount) || 0)
-                            return (
-                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{ width: '48px', height: '60px', borderRadius: '3px', overflow: 'hidden', background: S.bg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {img ? <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: '20px', opacity: .4 }}>🛍️</span>}
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{it.products?.title || 'Product'}</p>
-                                  <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>Qty: {it.quantity}</p>
-                                </div>
-                                <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{formatPrice(line)}</p>
+                        {groupBySeller(o.order_items).map((ship, gi) => {
+                          const multi = groupBySeller(o.order_items).length > 1
+                          return (
+                            <div key={gi} style={{ borderTop: `1px solid ${S.border}`, paddingTop: '14px', marginTop: gi === 0 ? '4px' : '14px' }}>
+                              {multi && (
+                                <p style={{ fontSize: '11px', letterSpacing: '.06em', color: S.muted, fontFamily: S.sans, marginBottom: '10px' }}>
+                                  SHIPMENT {gi + 1} OF {groupBySeller(o.order_items).length} · {ship.sellerName}
+                                </p>
+                              )}
+
+                              {/* items in this shipment */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
+                                {ship.items.map((it, i) => {
+                                  const img = it.products?.images?.[0]
+                                  const line = (Number(it.seller_amount) || 0) + (Number(it.platform_amount) || 0)
+                                  const cancelled = it.fulfillment_status === 'cancelled'
+                                  return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: cancelled ? 0.5 : 1 }}>
+                                      <div style={{ width: '48px', height: '60px', borderRadius: '3px', overflow: 'hidden', background: S.bg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {img ? <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: '20px', opacity: .4 }}>🛍️</span>}
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans, textDecoration: cancelled ? 'line-through' : 'none' }}>{it.products?.title || 'Product'}</p>
+                                        <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans }}>Qty: {it.quantity}</p>
+                                      </div>
+                                      <p style={{ fontSize: '13px', color: S.dark, fontFamily: S.sans }}>{formatPrice(line)}</p>
+                                    </div>
+                                  )
+                                })}
                               </div>
-                            )
-                          })}
-                        </div>
+
+                              {/* shipment status — uses the lowest status across its items */}
+                              {(() => {
+                                const statuses = ship.items.map(it => it.fulfillment_status || 'confirmed')
+                                const allCancelled = statuses.every(s => s === 'cancelled')
+                                if (allCancelled) {
+                                  return <p style={{ fontSize: '12px', color: '#b91c1c', fontFamily: S.sans }}>This shipment was cancelled.</p>
+                                }
+                                const live = statuses.filter(s => s !== 'cancelled')
+                                const order = ['confirmed','packed','shipped','delivered']
+                                const current = live.sort((a,b) => order.indexOf(a) - order.indexOf(b))[0] || 'confirmed'
+                                const curIdx = order.indexOf(current)
+                                const lead = ship.items.find(it => (it.fulfillment_status || 'confirmed') === current) || ship.items[0]
+                                const cancellable = ['confirmed','packed'].includes(current)
+                                return (
+                                  <>
+                                    {/* progress tracker */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '10px' }}>
+                                      {SHIP_STEPS.map((step, si) => {
+                                        const done = si <= curIdx
+                                        return (
+                                          <div key={step.key} style={{ display: 'flex', alignItems: 'center', flex: si < SHIP_STEPS.length - 1 ? 1 : '0 0 auto' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                              <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: done ? S.accent : S.white, border: `2px solid ${done ? S.accent : S.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff' }}>
+                                                {done ? '✓' : ''}
+                                              </div>
+                                              <span style={{ fontSize: '9px', color: done ? S.accent : S.muted, fontFamily: S.sans, whiteSpace: 'nowrap' }}>{step.label}</span>
+                                            </div>
+                                            {si < SHIP_STEPS.length - 1 && (
+                                              <div style={{ flex: 1, height: '2px', background: si < curIdx ? S.accent : S.border, margin: '0 4px', marginBottom: '14px' }} />
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+
+                                    {/* tracking link */}
+                                    {lead?.tracking_number && (current === 'shipped' || current === 'delivered') && (
+                                      <p style={{ fontSize: '12px', color: S.muted, fontFamily: S.sans, marginBottom: '8px' }}>
+                                        {lead.courier_name} · {lead.tracking_number}
+                                        {lead.tracking_url && <> · <a href={lead.tracking_url} target="_blank" rel="noreferrer" style={{ color: S.accent }}>Track shipment →</a></>}
+                                      </p>
+                                    )}
+
+                                    {/* cancel (before it ships) */}
+                                    {cancellable && (
+                                      <button onClick={() => cancelItem(lead.id)}
+                                        style={{ fontSize: '11px', color: '#b91c1c', background: 'transparent', border: `1px solid #fecaca`, padding: '6px 12px', cursor: 'pointer', fontFamily: S.sans, letterSpacing: '.05em' }}>
+                                        CANCEL THIS SHIPMENT
+                                      </button>
+                                    )}
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          )
+                        })}
                       </div>
                     )
                   })}
