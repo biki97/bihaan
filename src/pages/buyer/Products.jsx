@@ -36,6 +36,68 @@ const CAT_STYLE = {
   'Other':           { bg: '#f5f0e8', emoji: '🛍️' },
 }
 
+// ── Search helpers ──
+// Relevance score: title matches weigh most, then category/state, then description.
+function scoreProduct(p, rawQuery) {
+  const q = rawQuery.toLowerCase().trim()
+  if (!q) return 0
+  const title = (p.title || '').toLowerCase()
+  const cat   = (p.category || '').toLowerCase()
+  const state = (p.state || '').toLowerCase()
+  const desc  = (p.description || '').toLowerCase()
+  let s = 0
+  if (title === q)            s += 100
+  if (title.startsWith(q))    s += 50
+  if (title.includes(q))      s += 30
+  if (cat.includes(q))        s += 15
+  if (state.includes(q))      s += 10
+  if (desc.includes(q))       s += 5
+  for (const w of q.split(/\s+/)) {
+    if (!w) continue
+    if (title.includes(w)) s += 8
+    if (cat.includes(w))   s += 4
+    if (desc.includes(w))  s += 2
+  }
+  return s
+}
+
+// Levenshtein distance — for "did you mean" suggestions on a no-results search.
+function levenshtein(a, b) {
+  a = a.toLowerCase(); b = b.toLowerCase()
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+    }
+  }
+  return dp[m][n]
+}
+
+// Find the closest product title / category to a query (for "did you mean").
+function closestMatch(query, products) {
+  const q = query.toLowerCase().trim()
+  if (!q) return null
+  const candidates = []
+  for (const p of products) if (p.title) candidates.push(p.title)
+  const cats = ['Silk & Textiles','Handloom','Bamboo Crafts','Brass & Metal','Tea & Spices','Heritage Crafts','Pottery','Jewellery']
+  candidates.push(...cats)
+  let best = null, bestDist = Infinity
+  for (const c of candidates) {
+    // compare query against the candidate and against each of its words
+    const words = c.toLowerCase().split(/\s+/)
+    const dists = [levenshtein(q, c.toLowerCase()), ...words.map(w => levenshtein(q, w))]
+    const d = Math.min(...dists)
+    if (d < bestDist) { bestDist = d; best = c }
+  }
+  // only suggest if it's reasonably close (not a wild guess)
+  return bestDist <= Math.max(2, Math.floor(q.length / 2)) ? best : null
+}
+
 function CurrencyToggle() {
   const { currency, setCurrency } = useCurrency()
   return (
@@ -65,8 +127,9 @@ export default function Products() {
   const [search,      setSearch]      = useState('')
   const [cat,         setCat]         = useState(searchParams.get('category') || 'All Products')
   const [state,       setState]       = useState(searchParams.get('state') || 'All')
-  const [sort,        setSort]        = useState('newest')
+  const [sort,        setSort]        = useState('best')
   const [priceMax,    setPriceMax]    = useState(10000)
+  const [showSuggest, setShowSuggest] = useState(false)
 
   useEffect(() => {
     loadProducts()
@@ -96,19 +159,59 @@ export default function Products() {
     setLoading(false)
   }
 
-  const filtered = allProducts
+  const q = search.trim()
+  const ratingOf = id => (ratings[id] ? ratings[id].avg : 0)
+  const countOf  = id => (ratings[id] ? ratings[id].count : 0)
+
+  // Apply filters first (these always combine with AND)
+  const baseFiltered = allProducts
     .filter(p => cat   === 'All Products' || p.category === cat)
     .filter(p => state === 'All'          || p.state    === state)
     .filter(p => p.price <= priceMax)
-    .filter(p =>
-      p.title?.toLowerCase().includes(search.toLowerCase()) ||
-      p.description?.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a,b) =>
-      sort === 'price_asc'  ? a.price - b.price :
-      sort === 'price_desc' ? b.price - a.price :
-      new Date(b.created_at) - new Date(a.created_at)
-    )
+
+  // Then search: relevance scoring across title/category/state/description
+  const searched = q
+    ? baseFiltered
+        .map(p => ({ p, score: scoreProduct(p, q) }))
+        .filter(x => x.score > 0)
+        .map(x => x.p)
+    : baseFiltered
+
+  const filtered = [...searched].sort((a, b) => {
+    if (sort === 'price_asc')  return a.price - b.price
+    if (sort === 'price_desc') return b.price - a.price
+    if (sort === 'rating')     return ratingOf(b.id) - ratingOf(a.id) || countOf(b.id) - countOf(a.id)
+    if (sort === 'reviews')    return countOf(b.id) - countOf(a.id)
+    if (sort === 'newest')     return new Date(b.created_at) - new Date(a.created_at)
+    // 'best' = relevance when searching, else newest
+    if (q) return scoreProduct(b, q) - scoreProduct(a, q)
+    return new Date(b.created_at) - new Date(a.created_at)
+  })
+
+  // Autocomplete suggestions (product titles + matching categories)
+  const suggestions = (() => {
+    if (q.length < 1) return []
+    const ql = q.toLowerCase()
+    const titleHits = allProducts
+      .filter(p => p.title?.toLowerCase().includes(ql))
+      .slice(0, 5)
+      .map(p => ({ type: 'product', label: p.title, id: p.id }))
+    const catHits = categories
+      .filter(c => c !== 'All Products' && c.toLowerCase().includes(ql))
+      .slice(0, 3)
+      .map(c => ({ type: 'category', label: c }))
+    return [...titleHits, ...catHits].slice(0, 6)
+  })()
+
+  // "Did you mean" — only computed when a search returns nothing
+  const didYouMean = (q && filtered.length === 0) ? closestMatch(q, allProducts) : null
+
+  const activeFilters = [
+    cat !== 'All Products' && { key: 'cat',   label: cat,            clear: () => setCat('All Products') },
+    state !== 'All'        && { key: 'state', label: state,          clear: () => setState('All') },
+    priceMax < 10000       && { key: 'price', label: `≤ ${formatPrice(priceMax)}`, clear: () => setPriceMax(10000) },
+    q                      && { key: 'q',     label: `"${q}"`,       clear: () => setSearch('') },
+  ].filter(Boolean)
 
   return (
     <div style={{ background: S.bg, fontFamily: S.sans, minHeight: '100vh', overflowX: 'hidden' }}>
@@ -145,11 +248,37 @@ export default function Products() {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <h1 style={{ fontFamily: S.serif, fontSize: '2rem', fontWeight: 400, color: S.dark }}>All Products</h1>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input type="text" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)}
-              style={{ fontSize: '13px', padding: '8px 16px', border: `1px solid ${S.border}`, background: S.bg, color: S.dark, outline: 'none', width: '240px', fontFamily: S.sans }} />
+            <div style={{ position: 'relative', width: '240px' }}>
+              <input type="text" placeholder="Search products..." value={search}
+                onChange={e => { setSearch(e.target.value); setShowSuggest(true) }}
+                onFocus={() => setShowSuggest(true)}
+                onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                style={{ fontSize: '13px', padding: '8px 16px', border: `1px solid ${S.border}`, background: S.bg, color: S.dark, outline: 'none', width: '100%', fontFamily: S.sans, boxSizing: 'border-box' }} />
+              {showSuggest && suggestions.length > 0 && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: S.white, border: `1px solid ${S.border}`, borderRadius: '3px', boxShadow: '0 6px 20px rgba(26,18,8,.08)', zIndex: 60, overflow: 'hidden' }}>
+                  {suggestions.map((sug, i) => (
+                    <div key={i}
+                      onMouseDown={() => {
+                        if (sug.type === 'product') navigate(`/product/${sug.id}`)
+                        else { setCat(sug.label); setSearch(''); setShowSuggest(false) }
+                      }}
+                      style={{ padding: '9px 14px', fontSize: '13px', cursor: 'pointer', color: S.dark, fontFamily: S.sans, display: 'flex', alignItems: 'center', gap: '8px', borderBottom: i < suggestions.length - 1 ? `1px solid ${S.border}` : 'none' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fef9f7'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <span style={{ fontSize: '11px' }}>{sug.type === 'product' ? '🔍' : '🏷️'}</span>
+                      <span>{sug.label}</span>
+                      {sug.type === 'category' && <span style={{ fontSize: '10px', color: S.muted, marginLeft: 'auto' }}>CATEGORY</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <select value={sort} onChange={e => setSort(e.target.value)}
               style={{ fontSize: '12px', padding: '8px 14px', border: `1px solid ${S.border}`, background: S.white, color: S.dark, outline: 'none', fontFamily: S.sans }}>
+              <option value="best">{search.trim() ? 'Best match' : 'Featured'}</option>
               <option value="newest">Newest first</option>
+              <option value="rating">Top rated</option>
+              <option value="reviews">Most reviewed</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
             </select>
@@ -208,16 +337,27 @@ export default function Products() {
 
         {/* Products grid */}
         <div style={{ paddingLeft: '36px' }}>
+          {/* Active filter chips */}
+          {activeFilters.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+              {activeFilters.map(f => (
+                <button key={f.key} onClick={f.clear}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '5px 10px', borderRadius: '14px', border: `1px solid ${S.accent}`, background: '#fef9f7', color: S.accent, cursor: 'pointer', fontFamily: S.sans }}>
+                  {f.label} <span style={{ fontSize: '13px' }}>×</span>
+                </button>
+              ))}
+              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(10000); setSearch('') }}
+                style={{ fontSize: '11px', letterSpacing: '.08em', color: S.muted, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                CLEAR ALL
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <p style={{ fontSize: '13px', color: S.muted, fontFamily: S.sans }}>
-              {loading ? 'Loading...' : `${filtered.length} products found`}
+              {loading ? 'Loading...' : `${filtered.length} ${filtered.length === 1 ? 'product' : 'products'} found`}
+              {!loading && search.trim() && <span style={{ color: S.dark }}> for "{search.trim()}"</span>}
             </p>
-            {(cat !== 'All Products' || state !== 'All' || priceMax < 10000 || search) && (
-              <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(10000); setSearch('') }}
-                style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
-                CLEAR FILTERS ×
-              </button>
-            )}
           </div>
 
           {loading ? (
@@ -233,9 +373,23 @@ export default function Products() {
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 0' }}>
               <p style={{ fontSize: '32px', marginBottom: '12px' }}>🔍</p>
-              <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '12px' }}>No products found.</p>
+              <p style={{ color: S.dark, fontFamily: S.sans, marginBottom: '6px', fontSize: '15px' }}>
+                No products found{search.trim() ? ` for "${search.trim()}"` : ''}.
+              </p>
+              {didYouMean && (
+                <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '16px', fontSize: '13px' }}>
+                  Did you mean{' '}
+                  <span onClick={() => setSearch(didYouMean)}
+                    style={{ color: S.accent, cursor: 'pointer', textDecoration: 'underline' }}>
+                    {didYouMean}
+                  </span>?
+                </p>
+              )}
+              <p style={{ color: S.muted, fontFamily: S.sans, marginBottom: '16px', fontSize: '13px' }}>
+                Try fewer filters or a different search.
+              </p>
               <button onClick={() => { setCat('All Products'); setState('All'); setPriceMax(10000); setSearch('') }}
-                style={{ fontSize: '11px', letterSpacing: '.1em', color: S.accent, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
+                style={{ fontSize: '11px', letterSpacing: '.1em', color: '#fff', background: S.accent, padding: '10px 22px', border: 'none', cursor: 'pointer', fontFamily: S.sans }}>
                 CLEAR ALL FILTERS
               </button>
             </div>

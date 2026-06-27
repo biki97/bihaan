@@ -267,11 +267,12 @@ export default function SellerDashboard() {
           buyerEmail: email,
           buyerName:  addr.name || '',
           shipment: {
-            shopName:    seller?.shop_name || '',
-            items:       [{ name: it.products?.title || 'Item', qty: it.quantity, price: Number(it.price) || 0 }],
-            courier:     extra.courier     || it.courier_name    || '',
-            tracking:    extra.tracking    || it.tracking_number || '',
-            trackingUrl: extra.trackingUrl || it.tracking_url    || '',
+            shopName:     seller?.shop_name || '',
+            sellerEmail:  user?.email || '',
+            items:        [{ name: it.products?.title || 'Item', qty: it.quantity, price: Number(it.price) || 0 }],
+            courier:      extra.courier     || it.courier_name    || '',
+            tracking:     extra.tracking    || it.tracking_number || '',
+            trackingUrl:  extra.trackingUrl || it.tracking_url    || '',
           },
         }),
       })

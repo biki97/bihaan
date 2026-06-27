@@ -121,26 +121,38 @@ export default async function handler(req, res) {
       })
     }
 
-    // ── NEW: order delivered ──
+    // ── NEW: order delivered ── (notifies buyer + admin + seller)
     if (type === 'order_delivered') {
       const s = shipment || {}
-      await sendEmail({
-        to: buyerEmail,
-        subject: `Your Bihaan order was delivered ✓`,
-        html: wrap(`
-          <div style="background:#fff;border:1px solid #e2d8ce;padding:32px;margin-bottom:20px">
-            <h2 style="font-size:20px;font-weight:400;color:#1a1208;margin:0 0 8px">Delivered! ✓</h2>
-            <p style="font-size:14px;color:#7a6e62;margin:0 0 24px">
-              Hi ${buyerName || 'there'}, your items${s.shopName ? ` from <b>${s.shopName}</b>` : ''} have been delivered. We hope you love them.
-            </p>
-            <div style="border-top:1px solid #e2d8ce;padding-top:20px">
-              ${itemRows(s.items)}
-            </div>
-            <div style="border-top:1px solid #e2d8ce;padding-top:16px;margin-top:8px">
-              <p style="font-size:13px;color:#7a6e62;margin:0">Loved your order? Leaving a review helps the artisan and other buyers.</p>
-            </div>
+      const deliveredHtml = wrap(`
+        <div style="background:#fff;border:1px solid #e2d8ce;padding:32px;margin-bottom:20px">
+          <h2 style="font-size:20px;font-weight:400;color:#1a1208;margin:0 0 8px">Delivered! ✓</h2>
+          <p style="font-size:14px;color:#7a6e62;margin:0 0 24px">
+            ${s.shopName ? `Items from <b>${s.shopName}</b>` : 'The order'} ${buyerName ? `for <b>${buyerName}</b>` : ''} ${'have been delivered.'}
+          </p>
+          <div style="border-top:1px solid #e2d8ce;padding-top:20px">
+            ${itemRows(s.items)}
           </div>
-        `)
+          <div style="border-top:1px solid #e2d8ce;padding-top:16px;margin-top:8px">
+            <p style="font-size:13px;color:#7a6e62;margin:0">Loved the order? A review helps the artisan and other buyers.</p>
+          </div>
+        </div>
+      `)
+
+      // Build the recipient list: buyer, admin, and the seller (if we have their email).
+      const recipients = []
+      if (buyerEmail)   recipients.push(buyerEmail)
+      recipients.push('bikidutta319@gmail.com')              // admin (you)
+      if (s.sellerEmail) recipients.push(s.sellerEmail)      // seller's own email
+      else               recipients.push('bikidutta319@gmail.com') // fallback: route seller copy to admin
+
+      // De-duplicate so nobody gets two copies
+      const uniqueTo = [...new Set(recipients.filter(Boolean))]
+
+      await sendEmail({
+        to: uniqueTo,
+        subject: `Delivered ✓ — ${s.shopName ? s.shopName + ' · ' : ''}Bihaan order`,
+        html: deliveredHtml,
       })
     }
 

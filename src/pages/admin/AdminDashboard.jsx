@@ -274,6 +274,29 @@ export default function AdminDashboard() {
   // Count of items needing attention (not delivered/cancelled)
   const activeFulfillCount = items.filter(it => !['delivered', 'cancelled'].includes(it.fulfillment_status || 'confirmed')).length
 
+  // ── "Needs attention" stats for the Fulfillment tab ──
+  // Surfaces the outliers so admin monitors exceptions, not every single row.
+  const DAYS = ms => ms / (1000 * 60 * 60 * 24)
+  const now = Date.now()
+  const fulfillStats = (() => {
+    let awaitingDispatch = 0   // confirmed/packed for > 2 days (seller hasn't shipped)
+    let inTransitLong    = 0   // shipped but not delivered for > 7 days (possibly lost)
+    let cancelled        = 0
+    let deliveredTotal   = 0
+    for (const it of items) {
+      const fs = it.fulfillment_status || 'confirmed'
+      const placed = it.orders?.created_at ? new Date(it.orders.created_at).getTime() : now
+      if (fs === 'cancelled') { cancelled++; continue }
+      if (fs === 'delivered') { deliveredTotal++; continue }
+      if ((fs === 'confirmed' || fs === 'packed') && DAYS(now - placed) > 2) awaitingDispatch++
+      if (fs === 'shipped') {
+        const shipped = it.shipped_at ? new Date(it.shipped_at).getTime() : placed
+        if (DAYS(now - shipped) > 7) inTransitLong++
+      }
+    }
+    return { awaitingDispatch, inTransitLong, cancelled, deliveredTotal }
+  })()
+
   if (loading) return (
     <div style={{ background: S.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: S.muted, fontFamily: S.sans }}>Loading admin panel...</p>
@@ -532,6 +555,40 @@ export default function AdminDashboard() {
               from={dateFrom} setFrom={setDateFrom} to={dateTo} setTo={setDateTo}
               onDownload={downloadFulfill} onPrint={printFulfill}
               count={fulfillItems.length} total={items.length} downloadLabel="DOWNLOAD CSV" />
+
+            {/* NEEDS ATTENTION — surfaces the outliers so you monitor exceptions, not every row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
+              {[
+                { n: fulfillStats.awaitingDispatch, label: 'AWAITING DISPATCH', sub: '> 2 days, not shipped', tone: fulfillStats.awaitingDispatch > 0 ? 'warn' : 'ok', filter: 'confirmed' },
+                { n: fulfillStats.inTransitLong,    label: 'IN TRANSIT > 7 DAYS', sub: 'shipped, not delivered', tone: fulfillStats.inTransitLong > 0 ? 'bad' : 'ok', filter: 'shipped' },
+                { n: fulfillStats.cancelled,        label: 'CANCELLED',        sub: 'total cancelled items', tone: 'neutral', filter: 'cancelled' },
+                { n: fulfillStats.deliveredTotal,   label: 'DELIVERED',        sub: 'completed successfully', tone: 'good', filter: 'delivered' },
+              ].map(card => {
+                const palette = {
+                  warn:    { bar: '#f59e0b', num: '#92400e' },
+                  bad:     { bar: '#b91c1c', num: '#b91c1c' },
+                  good:    { bar: '#15803d', num: '#15803d' },
+                  neutral: { bar: S.muted,  num: S.dark   },
+                  ok:      { bar: S.border, num: S.dark   },
+                }[card.tone]
+                return (
+                  <div key={card.label} onClick={() => setFulfillFilter(card.filter)}
+                    style={{ background: S.white, border: `1px solid ${S.border}`, borderLeft: `3px solid ${palette.bar}`, padding: '14px 16px', borderRadius: '3px', cursor: 'pointer' }}>
+                    <p style={{ fontFamily: S.serif, fontSize: '1.7rem', color: palette.num, marginBottom: '2px' }}>{card.n}</p>
+                    <p style={{ fontSize: '10px', letterSpacing: '.06em', color: S.dark, fontFamily: S.sans, fontWeight: 600 }}>{card.label}</p>
+                    <p style={{ fontSize: '10px', color: S.muted, fontFamily: S.sans, marginTop: '2px' }}>{card.sub}</p>
+                  </div>
+                )
+              })}
+            </div>
+            {(fulfillStats.awaitingDispatch > 0 || fulfillStats.inTransitLong > 0) && (
+              <p style={{ fontSize: '12px', color: '#92400e', fontFamily: S.sans, background: '#fef5e7', border: '1px solid #fcd34d', padding: '8px 12px', borderRadius: '3px' }}>
+                ⚠ {fulfillStats.awaitingDispatch > 0 && `${fulfillStats.awaitingDispatch} item(s) haven't shipped in over 2 days`}
+                {fulfillStats.awaitingDispatch > 0 && fulfillStats.inTransitLong > 0 && ' · '}
+                {fulfillStats.inTransitLong > 0 && `${fulfillStats.inTransitLong} item(s) in transit over 7 days`}
+                . Tap a card above to filter, then nudge the seller or override the status.
+              </p>
+            )}
 
             {/* status filter chips */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
