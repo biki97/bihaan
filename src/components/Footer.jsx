@@ -31,6 +31,7 @@ export default function Footer() {
 
   // Existing nav-style links (point where it makes sense today)
   const mainLinks = [
+    { label: 'OUR STORY', onClick: () => navigate('/about') },
     { label: 'PRODUCTS', onClick: () => navigate('/products') },
     { label: 'SELL',     onClick: () => navigate('/seller/register') },
     { label: 'CONTACT',  onClick: () => { window.location.href = 'mailto:support@bihaan.in' } },

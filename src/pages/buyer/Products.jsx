@@ -225,7 +225,11 @@ export default function Products() {
         <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}><Logo size={36} showText={true} /></div>
         <div style={{ display: 'flex', gap: '28px' }}>
           {['Products','Artisans','Our Story','States'].map(item => (
-            <span key={item} style={{ fontSize: '13px', color: item === 'Products' ? S.accent : S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
+            <span key={item} onClick={() => {
+                if (item === 'Products')  navigate('/products')
+                if (item === 'Our Story') navigate('/about')
+              }}
+              style={{ fontSize: '13px', color: item === 'Products' ? S.accent : S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>

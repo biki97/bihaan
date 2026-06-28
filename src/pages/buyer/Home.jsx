@@ -122,7 +122,10 @@ function NavBar({ navigate }) {
       </div>
       <div style={{ display: isMobile ? 'none' : 'flex', gap: '28px' }}>
         {['Products','Artisans','Our Story','States'].map(item => (
-          <span key={item} onClick={() => item === 'Products' && navigate('/products')}
+          <span key={item} onClick={() => {
+              if (item === 'Products')  navigate('/products')
+              if (item === 'Our Story') navigate('/about')
+            }}
             style={{ fontSize: '13px', color: S.muted, letterSpacing: '.05em', cursor: 'pointer', fontFamily: S.sans }}>{item}</span>
         ))}
       </div>
